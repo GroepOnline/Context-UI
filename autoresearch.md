@@ -92,6 +92,19 @@ Run until interrupted by the user. No fixed experiment limit.
 - **Key insight**: A single global ratio can NEVER beat per-content-type ratios
 - Confirms that content-type awareness + char-density is essential for <15% MAPE
 
+### Experiment #7 (Bugfix: .txt→logOutput misclassification) - `5101e34` (CORRECTED BASELINE)
+- **BUG**: `getContentTypeFromPath()` mapped `.txt` files to `logOutput` (ratio=2.2)
+  causing massive overestimation (31.54% MAPE with false classification)
+- **Fix**: `.txt` now returns `unknown`, falling through to content-based detection
+- **Result**: MAPE dropped from 31.54% to **10.89%** — **65% improvement**
+- Only `.log` files are hardcoded as `logOutput`
+
+### Experiment #8 (Ratio tuning — pending in TypeScript)
+- All ratios raised to reduce systematic overestimation (every file was overestimated)
+- **New ratios: json=4.5, logOutput=2.6, diff=3.8, commandOutput=4.2, error=4.5, unknown=4.8**
+- code=4.0 and markdown=4.2 unchanged (were already close: 1.8% and 5.4% error)
+- **Applied in autoresearch.sh — waiting for identical changes in contextEstimator.ts**
+
 ## Key Learnings
 1. Chars/4 is a very crude approximation (18% error even on diverse corpus)
 2. Content-type ratios alone give 31% improvement (18.19% -> 12.59%)

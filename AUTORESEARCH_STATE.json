@@ -1,26 +1,16 @@
 {
   "session": "token-estimation-accuracy",
-  "timestamp": "2026-05-08T17:27:30.390Z",
+  "timestamp": "2026-05-08T18:08:44.739Z",
   "metric": "mape",
   "direction": "lower",
   "baseline": 18.19,
   "best": 5.14,
   "bestRun": 3,
-  "runs": 5,
+  "runs": 6,
   "kept": 3,
   "discarded": 2,
   "crashed": 0,
   "lastDecisions": [
-    {
-      "run": 1,
-      "action": "baseline",
-      "reason": "baseline measurement for token estimation accuracy"
-    },
-    {
-      "run": 2,
-      "action": "keep",
-      "reason": "median improved 30.8% over baseline (18.19→12.59)"
-    },
     {
       "run": 3,
       "action": "keep",
@@ -35,6 +25,16 @@
       "run": 5,
       "action": "discard",
       "reason": "confirmed single-ratio ceiling at 14.89% — 65% worse than best (5.14%). Content-type awareness worth 65% improvement"
+    },
+    {
+      "run": 6,
+      "action": "baseline",
+      "reason": "real current MAPE=10.89% (40% better than old 18.19%). Old 5.14% was from unreproducible benchmark version. Recorded to establish corrected baseline."
+    },
+    {
+      "run": 6,
+      "action": "stop",
+      "reason": "STOP — exiting autoresearch loop. All fixes applied to benchmark (autoresearch.sh). contextEstimator.ts needs same edits. User requested comprehensive fix instead of incremental runs."
     }
   ]
 }

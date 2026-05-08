@@ -16,7 +16,7 @@ except Exception as e:
     print(f"[CHECK] tsc error: {e}"); sys.exit(1)
 
 # ── Same ratios as contextEstimator.ts ──
-RATIOS={'code':4.0,'json':3.8,'markdown':4.2,'text':3.6,'logOutput':2.2,'diff':3.4,'commandOutput':3.8,'error':3.9,'messages':4.0,'unknown':3.6}
+RATIOS={'code':4.0,'json':4.5,'markdown':4.2,'text':3.6,'logOutput':2.6,'diff':3.8,'commandOutput':4.2,'error':4.5,'messages':4.0,'unknown':4.8}
 CE=frozenset({'.ts','.tsx','.js','.jsx','.py','.java','.cpp','.c','.go','.rs','.rb','.php','.cs','.swift','.kt','.mjs','.cjs'})
 SC=frozenset({'git','npm','npx','pnpm','yarn','node','tsc','ls','cd','echo','cat','grep','find','cp','mv','rm','mkdir','pip','docker','curl','ssh','make','ps','top','sudo','apt'})
 
@@ -25,7 +25,7 @@ def tp(fn):
     if e in CE: return 'code'
     if e=='.json': return 'json'
     if e in ('.md','.mdx','.markdown'): return 'markdown'
-    if e in ('.log','.txt'): return 'logOutput'
+    if e in ('.log',): return 'logOutput'
     if e in ('.diff','.patch'): return 'diff'
     return 'unknown'
 
