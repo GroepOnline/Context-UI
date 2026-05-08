@@ -5,3 +5,6 @@ dist/
 .env
 .vscode/
 *.tsbuildinfo
+__pycache__/
+*.pyc
+grid_search*.py
