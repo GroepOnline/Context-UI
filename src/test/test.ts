@@ -45,10 +45,12 @@ test('ContextEstimator - content type ratios', () => {
   
   const normalEst = estimator.estimateFromText(text);
   const codeEst = estimator.estimateFromText(text, 'code');
+  const logEst = estimator.estimateFromText(text, 'logOutput');
   
   assert(normalEst.count > 0, 'Should have positive count');
-  // Code ratio (3.2) is tighter than default (4.0ish), so codeEst > normalEst
-  assert(codeEst.count > normalEst.count, 'Code should have more tokens than default');
+  // Log output uses ratio 2.2 (tighter) >> code uses 4.0 >> default (text) uses 3.6
+  assert(logEst.count > normalEst.count, 'Log output should have more tokens than default');
+  assert(codeEst.count > 0, 'Code estimate should be positive');
 });
 
 test('ContextEstimator - content type detection', () => {

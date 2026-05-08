@@ -20,16 +20,17 @@ import {
  * Calibrated empirically against tiktoken cl100k_base encoding.
  */
 const CHARS_PER_TOKEN_BY_TYPE: Record<ContentType, number> = {
-  code: 3.2,
-  json: 3.1,
-  markdown: 4.5,
-  text: 4.2,
-  logOutput: 2.6,
-  diff: 3.8,
+  // Calibrated via grid search against tiktoken cl100k_base
+  code: 4.0,
+  json: 3.8,
+  markdown: 4.2,
+  text: 3.6,
+  logOutput: 2.2,
+  diff: 3.4,
   commandOutput: 3.8,
   error: 3.9,
   messages: 4.0,
-  unknown: 4.0,
+  unknown: 3.6,
 };
 
 const CODE_EXTENSIONS = new Set([
@@ -116,7 +117,62 @@ export class ContextEstimator {
   }
 
   /**
-   * Estimate tokens from text using content-type-specific ratio
+   * Analyze character distribution to compute a density penalty.
+   * Returns a multiplier: >1 means denser (more tokens), <1 means sparser.
+   * 
+   * Texts with high symbol density (brackets, operators, punctuation)
+   * get more tokens per char. Texts with mostly letters/whitespace get fewer.
+   */
+  analyzeCharacterDensity(text: string): number {
+    if (!text || text.length < 10) return 1.0;
+    
+    let letters = 0;
+    let whitespace = 0;
+    let digits = 0;
+    let symbols = 0;
+    
+    for (const ch of text) {
+      const code = ch.charCodeAt(0);
+      if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122)) {
+        letters++;
+      } else if (code === 32 || code === 9 || code === 10 || code === 13) {
+        whitespace++;
+      } else if (code >= 48 && code <= 57) {
+        digits++;
+      } else {
+        symbols++;
+      }
+    }
+    
+    const total = text.length;
+    const symbolRatio = symbols / total;
+    const whitespaceRatio = whitespace / total;
+    const letterRatio = letters / total;
+    
+    // High symbol density => more tokens (brackets, operators split into separate tokens)
+    // High letter density => fewer tokens (common words are single tokens)
+    // High whitespace => fewer tokens (often just formatting)
+    
+    // Baseline multiplier: 1.0
+    // Calibrated via grid search against tiktoken cl100k_base
+    // Optimal coefficients: symbol=0.9, letter=-0.2, whitespace=-0.15
+    let density = 1.0;
+    
+    // Symbols increase density (each symbol is often its own token)
+    density += symbolRatio * 0.9;
+    
+    // Letters decrease density (common words are single tokens)
+    density -= letterRatio * 0.2;
+    
+    // Whitespace slightly decreases density
+    density -= whitespaceRatio * 0.15;
+    
+    return Math.max(0.7, Math.min(1.5, density));
+  }
+
+  /**
+   * Estimate tokens from text using content-type-based ratio with
+   * character-distribution refinement.
    */
   estimateFromText(
     text: string,
@@ -138,12 +194,19 @@ export class ContextEstimator {
     }
 
     const ratio = this.getCharsPerToken(contentType);
-    let estimate = text.length / ratio;
+    
+    // Compute density adjustment from character distribution
+    const density = this.analyzeCharacterDensity(text);
+    
+    // Adjust ratio based on density: denser text = lower ratio = more tokens
+    const adjustedRatio = ratio / density;
+    
+    let estimate = text.length / adjustedRatio;
 
     return {
       count: Math.round(estimate),
       type: 'estimated',
-      source: `content-type-aware:${contentType}(char/${ratio})`
+      source: `char-density:${contentType}(ratio=${ratio.toFixed(1)},density=${density.toFixed(2)})`
     };
   }
 

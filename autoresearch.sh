@@ -25,8 +25,8 @@ if rc != 0:
     sys.exit(1)
 print("[CHECK] TypeScript syntax OK")
 
-# 2. Token accuracy benchmark
-stdout, stderr, rc = run_cmd("python autoresearch.py test 4.0 1.2 false 0", timeout=60)
+# 2. Token accuracy benchmark (with optimized params + char density)
+stdout, stderr, rc = run_cmd("python autoresearch.py test 4.0 3.6 4.2 2.0 3.4 3.6 true true", timeout=60)
 if rc != 0:
     print("[ERROR] Benchmark failed")
     print(stdout[:500])

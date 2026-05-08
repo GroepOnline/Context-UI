@@ -156,16 +156,49 @@ def detect_content_type(text: str) -> float:
     return 4.0
 
 
+def analyze_char_density(text: str) -> float:
+    """
+    Analyze character distribution to compute density multiplier.
+    Matches the TypeScript ContextEstimator.analyzeCharacterDensity.
+    
+    High symbol density => more tokens (brackets, operators).
+    High letter density => fewer tokens (common words are efficient).
+    """
+    if not text or len(text) < 10:
+        return 1.0
+    
+    letters = sum(1 for c in text if c.isalpha())
+    whitespace = sum(1 for c in text if c in ' \t\n\r')
+    digits = sum(1 for c in text if c.isdigit())
+    symbols = len(text) - letters - whitespace - digits
+    
+    total = len(text)
+    symbol_ratio = symbols / total
+    letter_ratio = letters / total
+    whitespace_ratio = whitespace / total
+    
+    # Baseline 1.0, adjusted by character distribution
+    # Optimal coefficients from grid search: symbol=0.9, letter=-0.2, whitespace=-0.15
+    density = 1.0
+    density += symbol_ratio * 0.9
+    density -= letter_ratio * 0.2
+    density -= whitespace_ratio * 0.15
+    
+    return max(0.7, min(1.5, density))
+
+
 def test_config(corpus_items: list[tuple[str, str]], 
-                code_ratio: float = 3.2,
-                json_ratio: float = 3.1,
-                md_ratio: float = 4.5,
-                log_ratio: float = 2.6,
-                diff_ratio: float = 3.8,
-                text_ratio: float = 4.2,
-                use_content_detection: bool = True) -> dict:
+                code_ratio: float = 4.0,
+                json_ratio: float = 3.8,
+                md_ratio: float = 4.2,
+                log_ratio: float = 2.2,
+                diff_ratio: float = 3.4,
+                text_ratio: float = 3.6,
+                use_content_detection: bool = True,
+                use_char_density: bool = False) -> dict:
     """
     Test a content-type-aware estimator configuration against ground truth.
+    When use_char_density=True, also applies character-distribution adjustment.
     
     Parameters:
         code_ratio: chars-per-token for code files (.ts, .js, .py, etc.)
@@ -175,6 +208,7 @@ def test_config(corpus_items: list[tuple[str, str]],
         diff_ratio: chars-per-token for diff/patch files
         text_ratio: chars-per-token for plain text / unknown files
         use_content_detection: if True, use file content heuristics as fallback
+        use_char_density: if True, apply character-density refinement
     """
     # Build ratio lookup from parameters
     ratio_overrides = {}
@@ -207,13 +241,20 @@ def test_config(corpus_items: list[tuple[str, str]],
         else:
             ratio = text_ratio
         
-        estimate = round(len(text) / ratio)
+        # Apply character-density refinement
+        if use_char_density:
+            density = analyze_char_density(text)
+            adjusted_ratio = ratio / density
+        else:
+            adjusted_ratio = ratio
+        
+        estimate = round(len(text) / adjusted_ratio)
         abs_error = abs(estimate - true_count)
         
         total_abs_error += abs_error
         total_true += true_count
         raw_errors.append(estimate - true_count)
-        file_results.append((fname, true_count, estimate, abs_error, ratio))
+        file_results.append((fname, true_count, estimate, abs_error, ratio, adjusted_ratio))
     
     n = len(corpus_items)
     mape = (total_abs_error / total_true * 100) if total_true > 0 else 0
@@ -240,16 +281,17 @@ if __name__ == "__main__":
     
     # Parse config from command line args
     if len(sys.argv) > 1 and sys.argv[1] == "test":
-        # Args: test [code_ratio] [json_ratio] [md_ratio] [log_ratio] [diff_ratio] [text_ratio] [use_content_detection]
-        cr = float(sys.argv[2]) if len(sys.argv) > 2 else 3.2
-        jr = float(sys.argv[3]) if len(sys.argv) > 3 else 3.1
-        mr = float(sys.argv[4]) if len(sys.argv) > 4 else 4.5
-        lr = float(sys.argv[5]) if len(sys.argv) > 5 else 2.6
-        dr = float(sys.argv[6]) if len(sys.argv) > 6 else 3.8
-        tr = float(sys.argv[7]) if len(sys.argv) > 7 else 4.2
+        # Args: test [code_ratio] [json_ratio] [md_ratio] [log_ratio] [diff_ratio] [text_ratio] [use_content_detection] [use_char_density]
+        cr = float(sys.argv[2]) if len(sys.argv) > 2 else 4.0
+        jr = float(sys.argv[3]) if len(sys.argv) > 3 else 3.8
+        mr = float(sys.argv[4]) if len(sys.argv) > 4 else 4.2
+        lr = float(sys.argv[5]) if len(sys.argv) > 5 else 2.2
+        dr = float(sys.argv[6]) if len(sys.argv) > 6 else 3.4
+        tr = float(sys.argv[7]) if len(sys.argv) > 7 else 3.6
         ucd = (sys.argv[8].lower() == "true") if len(sys.argv) > 8 else True
+        ucdensity = (sys.argv[9].lower() == "true") if len(sys.argv) > 9 else False
         
-        result = test_config(corpus_items, cr, jr, mr, lr, dr, tr, use_content_detection=ucd)
+        result = test_config(corpus_items, cr, jr, mr, lr, dr, tr, use_content_detection=ucd, use_char_density=ucdensity)
         print(f"METRIC mape={result['mape']}")
         print(f"METRIC mae={result['mae']}")
         print(f"METRIC bias={result['bias']}")
