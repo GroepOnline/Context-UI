@@ -23,6 +23,7 @@ const RED = '\x1b[31m';
 const CYAN = '\x1b[36m';
 const GRAY = '\x1b[90m';
 const BLUE = '\x1b[34m';
+const ANSI_REGEX = /\x1B\[[0-9;]*m/g;
 
 function riskColor(risk: RiskLevel): string {
   const map: Record<RiskLevel, string> = {
@@ -304,7 +305,11 @@ export class TerminalRenderer {
   }
 
   private makeLine(body: string): string {
-    const inner = ` ${body}`.padEnd(this.boxWidth - 2);
+    const contentWidth = this.boxWidth - 2;
+    const raw = ` ${body}`;
+    const trimmed = this.truncateVisible(raw, contentWidth);
+    const pad = Math.max(0, contentWidth - this.visibleLength(trimmed));
+    const inner = `${trimmed}${' '.repeat(pad)}`;
     return `│${inner}│`;
   }
 
@@ -389,5 +394,44 @@ export class TerminalRenderer {
   private formatTokens(est: { count: number; type: string }): string {
     const prefix = est.type === 'estimated' ? '~' : '';
     return `${prefix}${this.formatk(est.count)} tokens`;
+  }
+
+  private stripAnsi(text: string): string {
+    return text.replace(ANSI_REGEX, '');
+  }
+
+  private visibleLength(text: string): number {
+    return this.stripAnsi(text).length;
+  }
+
+  private truncateVisible(text: string, maxVisibleChars: number): string {
+    if (this.visibleLength(text) <= maxVisibleChars) return text;
+
+    const ellipsis = '...';
+    const target = Math.max(0, maxVisibleChars - ellipsis.length);
+    let out = '';
+    let visible = 0;
+
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+
+      if (ch === '\x1b') {
+        const match = text.slice(i).match(/^\x1B\[[0-9;]*m/);
+        if (match) {
+          out += match[0];
+          i += match[0].length - 1;
+          continue;
+        }
+      }
+
+      if (visible < target) {
+        out += ch;
+        visible += 1;
+      } else {
+        break;
+      }
+    }
+
+    return `${out}${ellipsis}`;
   }
 }

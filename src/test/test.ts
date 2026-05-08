@@ -28,6 +28,10 @@ function test(name: string, fn: () => void): void {
   }
 }
 
+function stripAnsi(text: string): string {
+  return text.replace(/\x1B\[[0-9;]*m/g, '');
+}
+
 // ============ Context Estimator Tests ============
 
 test('ContextEstimator - estimateFromText basic', () => {
@@ -182,6 +186,41 @@ test('TerminalRenderer - render with different modes', () => {
   
   const output = renderer.render(report);
   assert(output.includes('Token Breakdown'), 'Tokens mode should show breakdown');
+});
+
+test('TerminalRenderer - keeps consistent line width with ANSI colors', () => {
+  const renderer = new TerminalRenderer(80);
+  const estimator = new ContextEstimator();
+
+  const status = estimator.buildStatus(
+    estimator.estimateBreakdown(
+      [{ role: 'user', content: 'hello '.repeat(200) }],
+      [{ path: 'very/long/path/file.ts', content: 'const x = 1;\n'.repeat(300) }],
+      [],
+      ['npm run test -- --watch --very-long-option '.repeat(30)],
+      ['diff --git a/x b/x\n+line\n'.repeat(200)],
+      ['[2026-05-08 12:00:00] log line\n'.repeat(200)],
+      [{ message: 'Some long error message '.repeat(40) }]
+    )
+  );
+
+  const output = renderer.render({
+    status,
+    workingSet: {
+      task: 'Very long task title '.repeat(10),
+      files: [{ path: 'a/very/very/very/very/very/long/path/file.ts', reason: 'recent', tokenEstimate: 12345 }],
+      commands: [{ command: 'pnpm --filter app test --reporter verbose --long-args '.repeat(5) }],
+      errors: [{ message: 'Extremely verbose error message '.repeat(20) }],
+      largeConsumers: ['Huge JSON payload '.repeat(10)]
+    },
+    recommendation: { action: 'compact', message: 'Compact now due to high pressure '.repeat(6), priority: 'high' },
+    mode: 'default',
+    timestamp: Date.now()
+  });
+
+  const lines = stripAnsi(output).split('\n');
+  const boxLines = lines.filter(l => l.startsWith('│') || l.startsWith('╭') || l.startsWith('╰'));
+  assert(boxLines.every(l => l.length === 80), 'All box lines should keep exact terminal width');
 });
 
 // ============ Extension Integration Tests ============
