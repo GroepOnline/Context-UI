@@ -102,8 +102,9 @@ export interface PiCommandContext {
 }
 
 export interface PiExtensionAPI {
-  registerCommand(command: string, handler: (ctx: PiCommandContext) => Promise<void>): void;
+  registerCommand(command: string, handler: (ctx: PiCommandContext) => Promise<void>): Promise<void>;
   getSessionInfo(): Promise<unknown>;
+  getTerminalWidth(): Promise<number>;
   log(message: string): void;
   error(message: string): void;
 }
@@ -111,7 +112,8 @@ export interface PiExtensionAPI {
 export interface PiExtension {
   name: string;
   version: string;
+  description?: string;
   commands: string[];
-  activate(api: PiExtensionAPI): void;
+  activate(api: PiExtensionAPI): Promise<void>;
   deactivate(): void;
 }

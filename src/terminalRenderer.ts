@@ -1,5 +1,6 @@
 /**
  * Terminal Renderer - Renders context status in terminal UI
+ * Professional box-drawing with ANSI colors, progress bar, and risk indicators.
  */
 
 import {
@@ -11,13 +12,35 @@ import {
   ContextMode
 } from './types';
 
+// ANSI escape codes
+const RESET = '\x1b[0m';
+const BOLD = '\x1b[1m';
+const DIM = '\x1b[2m';
+const GREEN = '\x1b[32m';
+const YELLOW = '\x1b[33m';
+const MAGENTA = '\x1b[35m';
+const RED = '\x1b[31m';
+const CYAN = '\x1b[36m';
+const GRAY = '\x1b[90m';
+
+function riskColor(risk: RiskLevel): string {
+  const map: Record<RiskLevel, string> = {
+    LOW: GREEN,
+    MEDIUM: YELLOW,
+    HIGH: MAGENTA,
+    CRITICAL: RED,
+  };
+  return map[risk];
+}
+
 export class TerminalRenderer {
   private readonly terminalWidth: number;
   private readonly boxWidth: number;
 
-  constructor(terminalWidth: number = 80) {
-    this.terminalWidth = terminalWidth;
-    this.boxWidth = Math.min(terminalWidth, 80);
+  constructor(terminalWidth?: number) {
+    // Auto-detect terminal width, fallback to 80
+    this.terminalWidth = terminalWidth ?? process.stdout?.columns ?? 80;
+    this.boxWidth = Math.max(40, Math.min(this.terminalWidth, 100));
   }
 
   /**
@@ -38,266 +61,331 @@ export class TerminalRenderer {
     }
   }
 
-  /**
-   * Render default view with all sections
-   */
-  private renderDefault(report: ContextReport): string {
-    const sections = [
-      this.renderStatusBox(report.status),
-      '',
-      this.renderWorkingSetBox(report.workingSet),
-      '',
-      this.renderRecommendationBox(report.recommendation)
-    ];
+  // ================================================================
+  //  STATUS BOX — with progress bar + colored risk badge
+  // ================================================================
 
-    return sections.join('\n');
+  private renderStatusBox(status: ContextStatus): string {
+    const lines: string[] = [];
+    const fill = Math.round(status.fillPercentage);
+    const bar = this.makeProgressBar(fill);
+
+    lines.push(this.makeHeader('Context Status'));
+    lines.push(this.makeLine(` Used    ${this.formatk(status.used)} / ${this.formatk(status.total)} tokens`));
+    lines.push(this.makeLine(` Free    ${this.formatk(status.remaining)} tokens (${100 - fill}% remaining)`));
+    lines.push(this.makeLine(` ${bar}`));
+    lines.push(this.makeLine(` ${BOLD}Risk${RESET}    ${riskColor(status.risk)}${BOLD}${status.risk}${RESET}${GRAY}  —  ${this.riskLabel(status.risk)}${RESET}`));
+    lines.push(this.makeLine(` Mode    ${this.formatTokens(status.breakdown.total)} ${GRAY}(${status.breakdown.total.type})${RESET}`));
+    lines.push(this.makeFooter());
+
+    return lines.join('\n');
   }
 
-  /**
-   * Render compact view - only status box
-   */
+  // ================================================================
+  //  WORKING SET BOX
+  // ================================================================
+
+  private renderWorkingSetBox(workingSet: WorkingSet): string {
+    const lines: string[] = [];
+
+    lines.push(this.makeHeader('Active Working Set'));
+
+    if (workingSet.task) {
+      lines.push(this.makeLine(` Task    ${workingSet.task}`));
+    }
+
+    lines.push(this.makeLine(` Files   ${workingSet.files.length} recently touched`));
+
+    if (workingSet.commands.length > 0) {
+      const cmdStr = workingSet.commands.slice(0, 3).map(c => c.command).join(', ');
+      lines.push(this.makeLine(` Cmds    ${cmdStr}`));
+    }
+
+    if (workingSet.errors.length > 0) {
+      const errStr = workingSet.errors.slice(0, 2).map(e => e.message).join('; ');
+      lines.push(this.makeLine(` ${RED}Errors${RESET}  ${errStr}`));
+    }
+
+    if (workingSet.largeConsumers.length > 0) {
+      lines.push(this.makeLine(` ${YELLOW}Risks${RESET}   ${workingSet.largeConsumers.slice(0, 2).join('; ')}`));
+    }
+
+    lines.push(this.makeFooter());
+    return lines.join('\n');
+  }
+
+  // ================================================================
+  //  RECOMMENDATION BOX
+  // ================================================================
+
+  private renderRecommendationBox(rec: Recommendation): string {
+    const icon = this.actionIcon(rec.action);
+    const lines: string[] = [];
+
+    lines.push(this.makeHeader('Recommendation'));
+    lines.push(this.makeLine(` ${icon}  ${rec.message}`));
+    lines.push(this.makeFooter());
+    return lines.join('\n');
+  }
+
+  // ================================================================
+  //  MODE: compact
+  // ================================================================
+
   private renderCompact(status: ContextStatus): string {
     return this.renderStatusBox(status);
   }
 
-  /**
-   * Render tokens view - detailed breakdown
-   */
+  // ================================================================
+  //  MODE: tokens  (breakdown + largest consumers)
+  // ================================================================
+
   private renderTokens(status: ContextStatus): string {
     const lines: string[] = [];
-    
-    lines.push(this.createBoxHeader('Token Breakdown'));
-    
     const b = status.breakdown;
-    lines.push(this.createKeyValue('Messages', this.formatTokens(b.messages)));
-    lines.push(this.createKeyValue('Files', this.formatTokens(b.files)));
-    lines.push(this.createKeyValue('Tool Outputs', this.formatTokens(b.toolOutputs)));
-    lines.push(this.createKeyValue('Commands', this.formatTokens(b.commandOutputs)));
-    lines.push(this.createKeyValue('Diffs', this.formatTokens(b.diffs)));
-    lines.push(this.createKeyValue('Logs', this.formatTokens(b.logs)));
-    lines.push(this.createKeyValue('Errors', this.formatTokens(b.errors)));
-    
-    lines.push(this.createSeparator());
-    lines.push(this.createKeyValue('Total Used', this.formatTokens(b.total)));
-    lines.push(this.createKeyValue('Remaining', `~${Math.round(status.remaining / 1000)}k tokens`));
-    
-    lines.push(this.createBoxFooter());
 
-    return lines.map(l => this.padLine(l)).join('\n');
+    lines.push(this.makeHeader('Token Breakdown'));
+
+    const rows: Array<{ label: string; est: typeof b.messages }> = [
+      { label: 'Messages', est: b.messages },
+      { label: 'Files', est: b.files },
+      { label: 'Tool Outputs', est: b.toolOutputs },
+      { label: 'Commands', est: b.commandOutputs },
+      { label: 'Diffs', est: b.diffs },
+      { label: 'Logs', est: b.logs },
+      { label: 'Errors', est: b.errors },
+    ];
+
+    // Sort by count descending for visual weight
+    rows.sort((a, b) => b.est.count - a.est.count);
+
+    for (const r of rows) {
+      const pct = status.total > 0 ? ((r.est.count / status.total) * 100).toFixed(1) : '0.0';
+      const bar = this.miniBar(r.est.count, status.total);
+      lines.push(this.makeLine(
+        ` ${r.label.padEnd(12)} ${this.formatk(r.est.count)} ${GRAY}(${pct}%)${RESET} ${bar}`
+      ));
+    }
+
+    lines.push(this.makeSep());
+    lines.push(this.makeLine(
+      ` ${BOLD}Total${RESET}      ${this.formatk(status.used)} / ${this.formatk(status.total)}  ${GRAY}(${Math.round(status.fillPercentage)}%)${RESET}`
+    ));
+    lines.push(this.makeLine(
+      ` ${BOLD}Remaining${RESET}  ${this.formatk(status.remaining)}`
+    ));
+    lines.push(this.makeFooter());
+    return lines.join('\n');
   }
 
-  /**
-   * Render files view
-   */
+  // ================================================================
+  //  MODE: files
+  // ================================================================
+
   private renderFiles(workingSet: WorkingSet): string {
     const lines: string[] = [];
-    
-    lines.push(this.createBoxHeader('Files in Context'));
+
+    lines.push(this.makeHeader('Files in Context'));
 
     if (workingSet.files.length === 0) {
-      lines.push(this.createLine('No files detected in context'));
+      lines.push(this.makeLine(' (no files detected in context)'));
     } else {
       for (const file of workingSet.files) {
-        const tokenStr = file.tokenEstimate 
-          ? ` (~${Math.round(file.tokenEstimate / 1000)}k tokens)` 
+        const tok = file.tokenEstimate
+          ? ` ${GRAY}~${Math.round(file.tokenEstimate / 1000)}k${RESET}`
           : '';
-        lines.push(this.createLine(`${file.path}${tokenStr}`));
+        lines.push(this.makeLine(` ${file.path}${tok}`));
       }
     }
 
     if (workingSet.largeConsumers.length > 0) {
-      lines.push(this.createSeparator());
-      lines.push(this.createLine('Large Consumers:', true));
-      for (const consumer of workingSet.largeConsumers) {
-        lines.push(this.createLine(`  • ${consumer}`));
+      lines.push(this.makeSep());
+      lines.push(this.makeLine(` ${YELLOW}Large consumers:${RESET}`));
+      for (const c of workingSet.largeConsumers) {
+        lines.push(this.makeLine(`   ${c}`));
       }
     }
 
-    lines.push(this.createBoxFooter());
-
-    return lines.map(l => this.padLine(l)).join('\n');
+    lines.push(this.makeFooter());
+    return lines.join('\n');
   }
 
-  /**
-   * Render session summary for handoff
-   */
+  // ================================================================
+  //  MODE: summary  (copyable handoff text)
+  // ================================================================
+
   private renderSummary(report: ContextReport): string {
     const lines: string[] = [];
-    
-    lines.push(this.createBoxHeader('Session Summary'));
-    
-    if (report.workingSet.task) {
-      lines.push(this.createLine(`Task: ${report.workingSet.task}`));
-      lines.push(this.createSeparator());
+    const ws = report.workingSet;
+    const st = report.status;
+
+    lines.push(this.makeHeader('Session Summary'));
+
+    if (ws.task) {
+      lines.push(this.makeLine(` ${BOLD}Task${RESET}     ${ws.task}`));
+      lines.push(this.makeSep());
     }
 
-    // Context stats
-    lines.push(this.createLine(`Context Used: ${this.formatTokens(report.status.breakdown.total)}`));
-    lines.push(this.createLine(`Risk Level: ${report.status.risk}`));
-    lines.push(this.createSeparator());
+    lines.push(this.makeLine(` Used     ${this.formatTokens(st.breakdown.total)}`));
+    lines.push(this.makeLine(` Fill     ${Math.round(st.fillPercentage)}%  ${this.riskBadge(st.risk)}`));
 
-    // Files
-    if (report.workingSet.files.length > 0) {
-      lines.push(this.createLine('Key Files:', true));
-      for (const file of report.workingSet.files.slice(0, 5)) {
-        lines.push(this.createLine(`  • ${file.path}`));
+    if (ws.files.length > 0) {
+      lines.push(this.makeSep());
+      lines.push(this.makeLine(` ${BOLD}Key files${RESET}`));
+      for (const f of ws.files.slice(0, 6)) {
+        lines.push(this.makeLine(`   ${f.path}`));
       }
     }
 
-    // Recent commands
-    if (report.workingSet.commands.length > 0) {
-      lines.push(this.createSeparator());
-      lines.push(this.createLine('Recent Commands:', true));
-      for (const cmd of report.workingSet.commands.slice(0, 3)) {
-        lines.push(this.createLine(`  • ${cmd.command}`));
+    if (ws.commands.length > 0) {
+      lines.push(this.makeSep());
+      lines.push(this.makeLine(` ${BOLD}Recent commands${RESET}`));
+      for (const c of ws.commands.slice(0, 4)) {
+        lines.push(this.makeLine(`   ${c.command}`));
       }
     }
 
-    // Errors
-    if (report.workingSet.errors.length > 0) {
-      lines.push(this.createSeparator());
-      lines.push(this.createLine('Errors Encountered:', true));
-      for (const err of report.workingSet.errors.slice(0, 3)) {
-        lines.push(this.createLine(`  • ${err.message}`));
+    if (ws.errors.length > 0) {
+      lines.push(this.makeSep());
+      lines.push(this.makeLine(` ${RED}Errors${RESET}`));
+      for (const e of ws.errors.slice(0, 3)) {
+        lines.push(this.makeLine(`   ${e.message}`));
       }
     }
 
-    // TODOs
-    if (report.workingSet.todos && report.workingSet.todos.length > 0) {
-      lines.push(this.createSeparator());
-      lines.push(this.createLine('Outstanding TODOs:', true));
-      for (const todo of report.workingSet.todos) {
-        lines.push(this.createLine(`  • ${todo}`));
+    if (ws.todos && ws.todos.length > 0) {
+      lines.push(this.makeSep());
+      lines.push(this.makeLine(` ${CYAN}TODOs${RESET}`));
+      for (const t of ws.todos) {
+        lines.push(this.makeLine(`   ${t}`));
       }
     }
 
-    lines.push(this.createBoxFooter());
+    lines.push(this.makeFooter());
     lines.push('');
-    lines.push('Copy this summary to continue in a new session.');
+    lines.push(`${DIM}Copy this summary to continue in a new session.${RESET}`);
 
-    return lines.map(l => this.padLine(l)).join('\n');
+    return lines.join('\n');
   }
 
-  /**
-   * Render status box
-   */
-  private renderStatusBox(status: ContextStatus): string {
-    const lines: string[] = [];
-    
-    lines.push(this.createBoxHeader('Context Status'));
-    lines.push(this.createKeyValue('Used', this.formatTokens(status.breakdown.total)));
-    lines.push(this.createKeyValue('Remaining', `~${Math.round(status.remaining / 1000)}k tokens`));
-    lines.push(this.createKeyValue('Fill', `${Math.round(status.fillPercentage)}%`));
-    lines.push(this.createKeyValue('Risk', status.risk, this.getRiskColor(status.risk)));
-    lines.push(this.createBoxFooter());
+  // ================================================================
+  //  DEFAULT:  Status + Working Set + Recommendation
+  // ================================================================
 
-    return lines.map(l => this.padLine(l)).join('\n');
+  private renderDefault(report: ContextReport): string {
+    const parts = [
+      this.renderStatusBox(report.status),
+      '',
+      this.renderWorkingSetBox(report.workingSet),
+      '',
+      this.renderRecommendationBox(report.recommendation),
+    ];
+    return parts.join('\n');
   }
 
-  /**
-   * Render working set box
-   */
-  private renderWorkingSetBox(workingSet: WorkingSet): string {
-    const lines: string[] = [];
-    
-    lines.push(this.createBoxHeader('Active Working Set'));
-    
-    if (workingSet.task) {
-      lines.push(this.createKeyValue('Task', workingSet.task));
-    }
-    
-    lines.push(this.createKeyValue('Files', `${workingSet.files.length} recently touched`));
-    
-    if (workingSet.commands.length > 0) {
-      const cmdList = workingSet.commands
-        .slice(0, 2)
-        .map(c => c.command)
-        .join(', ');
-      lines.push(this.createKeyValue('Commands', cmdList));
-    }
+  // ================================================================
+  //  BOX-DRAWING HELPERS
+  // ================================================================
 
-    if (workingSet.largeConsumers.length > 0) {
-      lines.push(this.createKeyValue('Risks', workingSet.largeConsumers[0]));
-    }
-
-    lines.push(this.createBoxFooter());
-
-    return lines.map(l => this.padLine(l)).join('\n');
+  private makeHeader(title: string): string {
+    const inner = this.boxWidth - 2;
+    const mid = ` ${title} `.padEnd(inner, '─');
+    return `╭${mid}╮`;
   }
 
-  /**
-   * Render recommendation box
-   */
-  private renderRecommendationBox(recommendation: Recommendation): string {
-    const lines: string[] = [];
-    
-    lines.push(this.createBoxHeader('Recommendation'));
-    lines.push(this.createLine(recommendation.message));
-    lines.push(this.createBoxFooter());
-
-    return lines.map(l => this.padLine(l)).join('\n');
-  }
-
-  // ============ Helper Methods ============
-
-  private createBoxHeader(title: string): string {
-    const padding = this.boxWidth - title.length - 4;
-    const leftPad = Math.floor(padding / 2);
-    const rightPad = padding - leftPad;
-    return `╭─${'─'.repeat(leftPad)}${title}${'─'.repeat(rightPad)}─╮`;
-  }
-
-  private createBoxFooter(): string {
+  private makeFooter(): string {
     return `╰${'─'.repeat(this.boxWidth - 2)}╯`;
   }
 
-  private createSeparator(): string {
+  private makeSep(): string {
     return `│${'─'.repeat(this.boxWidth - 2)}│`;
   }
 
-  private createLine(text: string, bold: boolean = false): string {
-    const padded = ` ${text}`.padEnd(this.boxWidth - 2);
-    return `│${padded}│`;
+  private makeLine(body: string): string {
+    const inner = ` ${body}`.padEnd(this.boxWidth - 2);
+    return `│${inner}│`;
   }
 
-  private createKeyValue(key: string, value: string, valueColor?: string): string {
-    const colon = ':';
-    const space = ' ';
-    const maxKeyLen = 13;
-    const paddedKey = key.padEnd(maxKeyLen);
-    
-    const availableSpace = this.boxWidth - 2 - maxKeyLen - colon.length - space.length;
-    let displayValue = value;
-    
-    if (value.length > availableSpace) {
-      displayValue = value.substring(0, availableSpace - 3) + '...';
-    }
-    
-    return `│ ${paddedKey}${colon}${space}${displayValue.padEnd(availableSpace)}│`;
+  // ================================================================
+  //  VISUAL HELPERS
+  // ================================================================
+
+  /**
+   * ████████░░░░░░  visual progress bar (compact)
+   */
+  private makeProgressBar(pct: number, width: number = 14): string {
+    const filled = Math.round((pct / 100) * width);
+    const empty = width - filled;
+    const segFilled = '█'.repeat(filled);
+    const segEmpty = '░'.repeat(empty);
+
+    let color: string;
+    if (pct < 50) color = GREEN;
+    else if (pct < 75) color = YELLOW;
+    else if (pct < 90) color = MAGENTA;
+    else color = RED;
+
+    return `${GRAY}[${RESET}${color}${segFilled}${GRAY}${segEmpty}${RESET}${GRAY}]${RESET} ${color}${BOLD}${pct}%${RESET}`;
   }
 
-  private padLine(line: string): string {
-    if (line.length < this.boxWidth) {
-      return line + ' '.repeat(this.boxWidth - line.length);
-    }
-    return line;
+  /**
+   * Mini in-line bar for breakdown view (e.g. ████░░)
+   */
+  private miniBar(value: number, max: number): string {
+    if (max <= 0) return '';
+    const w = 6;
+    const fill = Math.round((value / max) * w);
+    const bar = '█'.repeat(fill) + '░'.repeat(Math.max(0, w - fill));
+    return `${GRAY}${bar}${RESET}`;
   }
 
-  private formatTokens(estimate: { count: number; type: string }): string {
-    const k = estimate.count / 1000;
-    const rounded = Math.round(k * 10) / 10;
-    const typeStr = estimate.type === 'estimated' ? '~' : '';
-    return `${typeStr}${rounded}k tokens`;
+  /**
+   * Colored risk badge text
+   */
+  private riskBadge(risk: RiskLevel): string {
+    return `${riskColor(risk)}${BOLD}${risk}${RESET}`;
   }
 
-  private getRiskColor(risk: RiskLevel): string {
-    // ANSI color codes (can be stripped for terminals without color support)
-    const colors: Record<RiskLevel, string> = {
-      'LOW': '\x1b[32m',      // Green
-      'MEDIUM': '\x1b[33m',   // Yellow
-      'HIGH': '\x1b[35m',     // Magenta
-      'CRITICAL': '\x1b[31m'  // Red
+  /**
+   * Human-readable label for risk level
+   */
+  private riskLabel(risk: RiskLevel): string {
+    const map: Record<RiskLevel, string> = {
+      LOW: 'Plenty of space',
+      MEDIUM: 'Approaching limit',
+      HIGH: 'Context pressure',
+      CRITICAL: 'Near overflow',
     };
-    return colors[risk];
+    return map[risk];
+  }
+
+  /**
+   * Icon per recommendation action
+   */
+  private actionIcon(action: string): string {
+    const map: Record<string, string> = {
+      continue: '✓',
+      compact: '↻',
+      'trim-logs': '✂',
+      summarize: '📋',
+      'new-session': '⛔',
+    };
+    return map[action] ?? '·';
+  }
+
+  // ================================================================
+  //  FORMATTING HELPERS
+  // ================================================================
+
+  private formatk(count: number): string {
+    if (count >= 1000) {
+      return `${(count / 1000).toFixed(1)}k`;
+    }
+    return String(count);
+  }
+
+  private formatTokens(est: { count: number; type: string }): string {
+    const prefix = est.type === 'estimated' ? '~' : '';
+    return `${prefix}${this.formatk(est.count)} tokens`;
   }
 }

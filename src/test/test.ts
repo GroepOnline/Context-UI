@@ -194,6 +194,7 @@ test('ContextExtension - activation', async () => {
   
   assert(extension.name === 'pi-context-extension', 'Should have correct name');
   assert(extension.commands.length === 3, 'Should have 3 commands');
+  assert(extension.description !== undefined, 'Should have description');
 });
 
 test('ContextExtension - command execution', async () => {
@@ -206,6 +207,53 @@ test('ContextExtension - command execution', async () => {
   
   // This should not throw
   await mockAPI.testExecuteCommand('/context', context);
+});
+
+test('ContextExtension - all command modes execute without error', async () => {
+  const extension = new ContextExtension();
+  const mockAPI = new MockPiAPI();
+  
+  mockAPI.setSessionData({
+    filesRead: ['src/test.ts', 'src/types.ts'],
+    commandOutputs: ['npm test\npass', 'npm build\nok'],
+    currentTask: 'Testing command modes'
+  });
+  
+  await extension.activate(mockAPI);
+  
+  // Test all modes
+  const modes = [[], ['compact'], ['tokens'], ['files'], ['summary'], ['unknown']];
+  for (const args of modes) {
+    const context = buildCommandContext(args, {});
+    await mockAPI.testExecuteCommand('/context', context);
+  }
+});
+
+// ============ PiAdapter Tests ============
+
+test('MockPiAPI - full lifecycle', async () => {
+  const api = new MockPiAPI();
+  
+  assert(typeof api.registerCommand === 'function', 'Should support registerCommand');
+  assert(typeof api.getSessionInfo === 'function', 'Should support getSessionInfo');
+  assert(typeof api.getTerminalWidth === 'function', 'Should support getTerminalWidth');
+  assert(typeof api.log === 'function', 'Should support log');
+  assert(typeof api.error === 'function', 'Should support error');
+  
+  const width = await api.getTerminalWidth();
+  assert(typeof width === 'number' && width > 0, 'Should return positive terminal width');
+});
+
+test('RealPiAPI - graceful fallback', async () => {
+  const { RealPiAPI } = await import('../piAdapter');
+  const api = new RealPiAPI(null as any);
+  
+  try {
+    await api.registerCommand('/test', async () => {});
+    assert(false, 'Should have thrown');
+  } catch (e: any) {
+    assert(e.message.includes('not available'), 'Should indicate Pi.dev is not available');
+  }
 });
 
 // ============ Run Tests ============

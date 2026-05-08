@@ -1,33 +1,40 @@
 /**
  * Pi.dev API Adapter
- * 
+ *
  * This module provides an abstraction layer between the extension
  * and Pi.dev's extension API. When Pi.dev's actual API is available,
  * implement the methods in this adapter.
+ *
+ * Expected Pi.dev extension API surface:
+ *   pi.registerCommand(name, handler)  — register a slash command
+ *   pi.getSessionInfo()                — get current session context
+ *   pi.getTerminalWidth()              — detect terminal columns
+ *   pi.onActivate() / onDeactivate()   — lifecycle hooks
+ *   pi.log(msg) / pi.error(msg)        — logging
  */
 
-import {
-  PiExtensionAPI,
-  PiCommandContext
-} from './types';
+import { PiExtensionAPI, PiCommandContext } from './types';
+
+// ========== MOCK API (dev / testing) ==========
 
 /**
- * Mock Pi API for development and testing
+ * Mock Pi API — used outside Pi.dev for development and testing.
  */
 export class MockPiAPI implements PiExtensionAPI {
   private commands: Map<string, (ctx: PiCommandContext) => Promise<void>> = new Map();
   private sessionData: any = {};
 
-  async registerCommand(
-    command: string,
-    handler: (ctx: PiCommandContext) => Promise<void>
-  ): Promise<void> {
+  async registerCommand(command: string, handler: (ctx: PiCommandContext) => Promise<void>): Promise<void> {
     this.commands.set(command, handler);
     console.log(`[MockPiAPI] Registered command: ${command}`);
   }
 
   async getSessionInfo(): Promise<unknown> {
     return this.sessionData;
+  }
+
+  async getTerminalWidth(): Promise<number> {
+    return process.stdout?.columns ?? 80;
   }
 
   log(message: string): void {
@@ -38,67 +45,74 @@ export class MockPiAPI implements PiExtensionAPI {
     console.error(`[Pi Error] ${message}`);
   }
 
-  /**
-   * Test helper: simulate command execution
-   */
+  /** Test helper: simulate command execution */
   async testExecuteCommand(command: string, context: PiCommandContext): Promise<void> {
     const handler = this.commands.get(command);
-    if (!handler) {
-      throw new Error(`Command not found: ${command}`);
-    }
+    if (!handler) throw new Error(`Command not found: ${command}`);
     await handler(context);
   }
 
-  /**
-   * Test helper: set mock session data
-   */
+  /** Test helper: inject mock session data */
   setSessionData(data: any): void {
     this.sessionData = data;
   }
 }
 
+// ========== REAL PI.DEV API ==========
+
 /**
- * Real Pi API wrapper
- * 
- * This will be implemented when Pi.dev provides the actual extension API.
- * For now, this is a placeholder that wraps the expected Pi.dev API.
+ * Real Pi.dev API wrapper.
+ *
+ * Maps the expected Pi.dev extension API to our PiExtensionAPI interface.
+ * When Pi.dev ships its actual API, adjust the property access patterns below.
  */
 export class RealPiAPI implements PiExtensionAPI {
   private piGlobal: any;
 
   constructor(piGlobal?: any) {
-    // When Pi.dev provides the global API object, it will be injected here
-    this.piGlobal = piGlobal || (global as any).pi;
+    this.piGlobal = piGlobal ?? (global as any).pi;
   }
 
-  async registerCommand(
-    command: string,
-    handler: (ctx: PiCommandContext) => Promise<void>
-  ): Promise<void> {
-    if (!this.piGlobal) {
-      throw new Error('Pi.dev API not available. Are you running inside Pi.dev?');
-    }
-
-    // Expected Pi.dev API: pi.registerCommand(command, handler)
-    // Adjust this to match actual Pi.dev API when available
+  async registerCommand(command: string, handler: (ctx: PiCommandContext) => Promise<void>): Promise<void> {
+    this.ensureApi();
+    // Try several possible Pi.dev API shapes
     if (typeof this.piGlobal.registerCommand === 'function') {
       await this.piGlobal.registerCommand(command, handler);
+    } else if (typeof this.piGlobal.commands?.register === 'function') {
+      await this.piGlobal.commands.register(command, handler);
+    } else if (typeof this.piGlobal.slashCommands?.add === 'function') {
+      await this.piGlobal.slashCommands.add(command, handler);
     } else {
-      throw new Error('Pi.dev API does not support registerCommand');
+      throw new Error(
+        'Pi.dev API: no registerCommand / commands.register / slashCommands.add found. ' +
+        'Update piAdapter.ts to match the actual Pi.dev extension API.'
+      );
     }
   }
 
   async getSessionInfo(): Promise<unknown> {
-    if (!this.piGlobal) {
-      return {};
-    }
-
-    // Expected Pi.dev API: pi.getSessionInfo()
+    this.ensureApi();
     if (typeof this.piGlobal.getSessionInfo === 'function') {
       return await this.piGlobal.getSessionInfo();
     }
-
+    if (typeof this.piGlobal.session?.getInfo === 'function') {
+      return await this.piGlobal.session.getInfo();
+    }
+    if (typeof this.piGlobal.context?.getSession === 'function') {
+      return await this.piGlobal.context.getSession();
+    }
     return {};
+  }
+
+  async getTerminalWidth(): Promise<number> {
+    this.ensureApi();
+    if (typeof this.piGlobal.getTerminalWidth === 'function') {
+      return await this.piGlobal.getTerminalWidth();
+    }
+    if (typeof this.piGlobal.terminal?.width === 'number') {
+      return this.piGlobal.terminal.width;
+    }
+    return process.stdout?.columns ?? 80;
   }
 
   log(message: string): void {
@@ -116,20 +130,24 @@ export class RealPiAPI implements PiExtensionAPI {
       console.error(message);
     }
   }
+
+  private ensureApi(): void {
+    if (!this.piGlobal) {
+      throw new Error('Pi.dev API not available. Run this inside Pi.dev or use MockPiAPI for testing.');
+    }
+  }
 }
 
+// ========== FACTORY ==========
+
 /**
- * Create appropriate Pi API instance
+ * Create the appropriate Pi API instance based on the runtime environment.
  */
 export function createPiAPI(): PiExtensionAPI {
-  // Check if running in Pi.dev environment
   const piGlobal = (global as any).pi;
-  
   if (piGlobal) {
     return new RealPiAPI(piGlobal);
   }
-  
-  // Fallback to mock for development/testing
   return new MockPiAPI();
 }
 

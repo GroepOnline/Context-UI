@@ -183,25 +183,27 @@ export class WorkingSetAnalyzer {
   }
 
   /**
-   * Helper: Estimate file tokens (without reading file)
+   * Helper: Estimate file tokens from path using content-type-aware ratio.
+   * Returns a rough token estimate based on the file type and average file sizes.
    */
   private estimateFileTokens(path: string): number {
-    // This is a placeholder - actual implementation would read file
-    // or use cached information from Pi API
-    const extension = path.split('.').pop() || '';
+    const contentType = this.estimator.getContentTypeFromPath(path);
+    const ratio = this.estimator.getCharsPerToken(contentType);
     
-    // Rough estimate based on file type
-    const avgSizes: Record<string, number> = {
-      'ts': 3000,
-      'tsx': 3000,
-      'js': 2500,
-      'jsx': 2500,
-      'py': 2000,
-      'md': 1500,
-      'json': 1000
+    // Estimate average file size by extension (empirical averages)
+    const ext = path.split('.').pop()?.toLowerCase() || '';
+    const avgSize: Record<string, number> = {
+      ts: 8000, tsx: 8000, js: 6000, jsx: 6000,
+      py: 5000, java: 5000, cpp: 5000, c: 4000,
+      go: 5000, rs: 5000, rb: 3000, php: 4000,
+      cs: 5000, swift: 5000, kt: 5000,
+      json: 4000, md: 3000, log: 20000, txt: 5000,
+      diff: 3000, patch: 3000,
     };
-
-    return avgSizes[extension] || 2000;
+    
+    const chars = avgSize[ext] ?? 4000;
+    const density = Math.min(1.3, Math.max(0.8, (chars / 4000) * 0.3 + 0.7));
+    return Math.round((chars / ratio) * density);
   }
 
   /**

@@ -18,6 +18,7 @@ import { createPiAPI, buildCommandContext } from './piAdapter';
 export class ContextExtension implements PiExtension {
   name = 'pi-context-extension';
   version = '1.0.0';
+  description = 'Context status, token estimation and working set overview (/context, /ctx, /tokens)';
   commands = ['/context', '/ctx', '/tokens'];
 
   private api: PiExtensionAPI | null = null;
@@ -25,10 +26,10 @@ export class ContextExtension implements PiExtension {
   private analyzer: WorkingSetAnalyzer;
   private renderer: TerminalRenderer;
 
-  constructor() {
+  constructor(terminalWidth?: number) {
     this.estimator = new ContextEstimator();
     this.analyzer = new WorkingSetAnalyzer(this.estimator);
-    this.renderer = new TerminalRenderer();
+    this.renderer = new TerminalRenderer(terminalWidth);
   }
 
   /**
@@ -37,12 +38,22 @@ export class ContextExtension implements PiExtension {
   async activate(api: PiExtensionAPI): Promise<void> {
     this.api = api;
     
+    // Detect terminal width from Pi API
+    try {
+      const width = await api.getTerminalWidth();
+      if (width > 0) {
+        this.renderer = new TerminalRenderer(width);
+      }
+    } catch {
+      // Use default
+    }
+
     // Register all command variants
     for (const cmd of this.commands) {
       await api.registerCommand(cmd, this.handleCommand.bind(this));
     }
 
-    api.log(`Context extension activated (${this.commands.join(', ')})`);
+    api.log(`Context extension v${this.version} activated — commands: ${this.commands.join(', ')}`);
   }
 
   /**
@@ -205,9 +216,14 @@ export class ContextExtension implements PiExtension {
 
 /**
  * Export for Pi.dev extension loader
+ * Pi.dev calls this when the extension is loaded.
  */
 export function activate(api: PiExtensionAPI): Promise<void> {
-  const extension = new ContextExtension();
+  // Try to detect terminal width up front, pass to constructor
+  const width = typeof api.getTerminalWidth === 'function'
+    ? undefined // will be resolved inside activate()
+    : process.stdout?.columns ?? 80;
+  const extension = new ContextExtension(width);
   return extension.activate(api);
 }
 
