@@ -22,6 +22,7 @@ const MAGENTA = '\x1b[35m';
 const RED = '\x1b[31m';
 const CYAN = '\x1b[36m';
 const GRAY = '\x1b[90m';
+const BLUE = '\x1b[34m';
 
 function riskColor(risk: RiskLevel): string {
   const map: Record<RiskLevel, string> = {
@@ -68,14 +69,17 @@ export class TerminalRenderer {
   private renderStatusBox(status: ContextStatus): string {
     const lines: string[] = [];
     const fill = Math.round(status.fillPercentage);
-    const bar = this.makeProgressBar(fill);
+    const bar = this.makeProgressBar(fill, 18);
+    const usedPct = `${fill}%`;
+    const remainingPct = `${Math.max(0, 100 - fill)}%`;
 
     lines.push(this.makeHeader('Context Status'));
-    lines.push(this.makeLine(` Used    ${this.formatk(status.used)} / ${this.formatk(status.total)} tokens`));
-    lines.push(this.makeLine(` Free    ${this.formatk(status.remaining)} tokens (${100 - fill}% remaining)`));
+    lines.push(this.makeLine(` ${BOLD}Window${RESET}    ${this.formatk(status.total)} tokens max`));
+    lines.push(this.makeLine(` ${BOLD}Used${RESET}      ${this.formatk(status.used)} tokens ${GRAY}(${usedPct})${RESET}`));
+    lines.push(this.makeLine(` ${BOLD}Remaining${RESET} ${this.formatk(status.remaining)} tokens ${GRAY}(${remainingPct})${RESET}`));
     lines.push(this.makeLine(` ${bar}`));
-    lines.push(this.makeLine(` ${BOLD}Risk${RESET}    ${riskColor(status.risk)}${BOLD}${status.risk}${RESET}${GRAY}  —  ${this.riskLabel(status.risk)}${RESET}`));
-    lines.push(this.makeLine(` Mode    ${this.formatTokens(status.breakdown.total)} ${GRAY}(${status.breakdown.total.type})${RESET}`));
+    lines.push(this.makeLine(` ${BOLD}Risk${RESET}      ${riskColor(status.risk)}${BOLD}${status.risk}${RESET}${GRAY}  ${this.riskLabel(status.risk)}${RESET}`));
+    lines.push(this.makeLine(` ${BOLD}Estimator${RESET} ${this.formatTokens(status.breakdown.total)} ${GRAY}[${status.breakdown.total.type}]${RESET}`));
     lines.push(this.makeFooter());
 
     return lines.join('\n');
@@ -162,14 +166,12 @@ export class TerminalRenderer {
     for (const r of rows) {
       const pct = status.total > 0 ? ((r.est.count / status.total) * 100).toFixed(1) : '0.0';
       const bar = this.miniBar(r.est.count, status.total);
-      lines.push(this.makeLine(
-        ` ${r.label.padEnd(12)} ${this.formatk(r.est.count)} ${GRAY}(${pct}%)${RESET} ${bar}`
-      ));
+      lines.push(this.makeLine(` ${r.label.padEnd(12)} ${this.formatk(r.est.count).padStart(6)} ${GRAY}${pct.padStart(5)}%${RESET}  ${bar}`));
     }
 
     lines.push(this.makeSep());
     lines.push(this.makeLine(
-      ` ${BOLD}Total${RESET}      ${this.formatk(status.used)} / ${this.formatk(status.total)}  ${GRAY}(${Math.round(status.fillPercentage)}%)${RESET}`
+      ` ${BOLD}Total${RESET}      ${this.formatk(status.used)} / ${this.formatk(status.total)}  ${GRAY}${Math.round(status.fillPercentage)}%${RESET}`
     ));
     lines.push(this.makeLine(
       ` ${BOLD}Remaining${RESET}  ${this.formatk(status.remaining)}`
@@ -320,9 +322,9 @@ export class TerminalRenderer {
     const segEmpty = '░'.repeat(empty);
 
     let color: string;
-    if (pct < 50) color = GREEN;
-    else if (pct < 75) color = YELLOW;
-    else if (pct < 90) color = MAGENTA;
+    if (pct < 50) color = BLUE;
+    else if (pct < 75) color = CYAN;
+    else if (pct < 90) color = YELLOW;
     else color = RED;
 
     return `${GRAY}[${RESET}${color}${segFilled}${GRAY}${segEmpty}${RESET}${GRAY}]${RESET} ${color}${BOLD}${pct}%${RESET}`;
@@ -351,10 +353,10 @@ export class TerminalRenderer {
    */
   private riskLabel(risk: RiskLevel): string {
     const map: Record<RiskLevel, string> = {
-      LOW: 'Plenty of space',
-      MEDIUM: 'Approaching limit',
-      HIGH: 'Context pressure',
-      CRITICAL: 'Near overflow',
+      LOW: 'healthy',
+      MEDIUM: 'watch usage',
+      HIGH: 'compact soon',
+      CRITICAL: 'compact now',
     };
     return map[risk];
   }
