@@ -1,0 +1,40 @@
+{
+  "session": "token-estimation-accuracy",
+  "timestamp": "2026-05-08T17:27:30.390Z",
+  "metric": "mape",
+  "direction": "lower",
+  "baseline": 18.19,
+  "best": 5.14,
+  "bestRun": 3,
+  "runs": 5,
+  "kept": 3,
+  "discarded": 2,
+  "crashed": 0,
+  "lastDecisions": [
+    {
+      "run": 1,
+      "action": "baseline",
+      "reason": "baseline measurement for token estimation accuracy"
+    },
+    {
+      "run": 2,
+      "action": "keep",
+      "reason": "median improved 30.8% over baseline (18.19→12.59)"
+    },
+    {
+      "run": 3,
+      "action": "keep",
+      "reason": "median improved 59.2% over best (12.59→5.14)"
+    },
+    {
+      "run": 4,
+      "action": "discard",
+      "reason": "14.89% > 5.14% best — single-ratio cannot beat content-type aware char-density refinement"
+    },
+    {
+      "run": 5,
+      "action": "discard",
+      "reason": "confirmed single-ratio ceiling at 14.89% — 65% worse than best (5.14%). Content-type awareness worth 65% improvement"
+    }
+  ]
+}

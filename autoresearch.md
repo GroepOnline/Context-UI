@@ -85,6 +85,13 @@ Run until interrupted by the user. No fixed experiment limit.
 - Best individual file errors: diff=0.3%, array-json=0.5%, logs=0.7%, typescript=1.8%
 - Worst: command-output=13.6%, natural-language=14.1%, json=11.8%
 
+### Experiment #6 (Global single-ratio grid search) - `b96a3d7` (DISCARD)
+- Grid search over global chars_per_token + code_weight + code_bonus
+- **Best: cpt=3.84, cw=0.9, code_bonus=28 → MAPE: 14.89%**
+- **Improvement: 17.8% vs baseline** but far worse than content-type aware (5.14%)
+- **Key insight**: A single global ratio can NEVER beat per-content-type ratios
+- Confirms that content-type awareness + char-density is essential for <15% MAPE
+
 ## Key Learnings
 1. Chars/4 is a very crude approximation (18% error even on diverse corpus)
 2. Content-type ratios alone give 31% improvement (18.19% -> 12.59%)
