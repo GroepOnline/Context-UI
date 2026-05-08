@@ -8,6 +8,19 @@ export type ContextMode = 'default' | 'compact' | 'tokens' | 'files' | 'summary'
 
 export type TokenType = 'exact' | 'api-derived' | 'estimated';
 
+/** Content type categories for token estimation ratios */
+export type ContentType =
+  | 'code'
+  | 'json'
+  | 'markdown'
+  | 'text'
+  | 'logOutput'
+  | 'diff'
+  | 'commandOutput'
+  | 'error'
+  | 'messages'
+  | 'unknown';
+
 export interface TokenEstimate {
   count: number;
   type: TokenType;
