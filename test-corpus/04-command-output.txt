@@ -1,0 +1,55 @@
+$ npm test
+
+> my-project@1.0.0 test
+> vitest run
+
+ ✓ src/__tests__/auth.test.ts (3 tests) 42ms
+ ✓ src/__tests__/api.test.ts (8 tests) 156ms
+ ✓ src/__tests__/components.test.ts (12 tests) 234ms
+ ✓ src/__tests__/utils.test.ts (5 tests) 67ms
+ ✓ src/__tests__/integration.test.ts (4 tests) 892ms
+
+ Test Files  5 passed (5)
+      Tests  32 passed (32)
+   Start at  12:34:56
+   Duration  1.52s (transform 234ms, setup 123ms, collect 456ms, tests 1.39s)
+
+$ npm run build
+
+> my-project@1.0.0 build
+> next build
+
+   ▲ Next.js 14.2.0
+   - Environments: .env.production
+
+ ✓ Creating an optimized production build
+ ✓ Compiled successfully
+ ✓ Collecting page data
+ ✓ Generating static pages (8/8)
+ ✓ Finalizing page optimization
+
+Route (app)                              Size     First Load JS
+┌ ○ /                                    5.2 kB          87 kB
+├ ○ /about                               1.3 kB          83 kB
+├ ○ /api/hello                           0 B            82.3 kB
+├ ○ /contact                             1.5 kB        83.2 kB
+├ ○ /dashboard                          12.8 kB        94.6 kB
+├ ○ /products                            8.4 kB        90.2 kB
+└ ○ /settings                           15.1 kB        96.9 kB
++ First Load JS shared by all            82.3 kB
+  ├ chunks/main-app.js                   62.5 kB
+  ├ chunks/webpack.js                    892 B
+  └ chunks/85b2c9d9a8e2f1c0.js         18.9 kB
+
+$ git diff --stat
+ src/components/Header.tsx    | 15 ++++++++++++---
+ src/pages/index.tsx          |  8 ++++++--
+ src/styles/globals.css       |  4 ++--
+ src/utils/api.ts             | 12 ++++++++++--
+ 4 files changed, 30 insertions(+), 10 deletions(-)
+
+$ git diff --cached --stat
+ src/lib/database.ts          | 25 ++++++++++++++++++++-----
+ src/middleware.ts             |  8 +++++---
+ src/types/index.ts           |  3 ++-
+ 3 files changed, 27 insertions(+), 9 deletions(-)

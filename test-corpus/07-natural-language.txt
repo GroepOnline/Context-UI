@@ -1,0 +1,13 @@
+The quick brown fox jumps over the lazy dog. This pangram contains every letter of the English alphabet at least once, making it useful for testing fonts and keyboard layouts. It has been used for decades as a standard test sentence in typography and printing.
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+
+Tokenization is the process of breaking down text into smaller pieces called tokens. These tokens can be words, subwords, characters, or other meaningful units depending on the tokenization algorithm used. Modern language models like GPT-4 use subword tokenization, which can represent common words as single tokens while breaking rare or complex words into multiple tokens. This approach balances vocabulary size with the ability to represent any text.
+
+The efficiency of tokenization varies significantly depending on the type of text. Source code typically requires more tokens per character than natural language text because of the dense use of punctuation, operators, and special characters. White space and indentation also consume tokens in most tokenizers. JSON data can be particularly token-inefficient because of the repeated structure markers like braces, quotes, and commas.
+
+When estimating token counts, it is important to consider the characteristics of the text being analyzed. A simple character count divided by a fixed ratio provides only a rough approximation. More sophisticated approaches might consider the distribution of whitespace, special characters, numbers, and common words to improve accuracy across different content types.
+
+Researchers have found that the average English text contains approximately four characters per token when using GPT-2 and GPT-3 tokenizers. However, this ratio can range from three to six characters per token depending on the specific content. Code, for example, tends to have a lower characters-per-token ratio because of the prevalence of single-character operators and punctuation marks. Markdown documents with extensive formatting may also deviate from the average.
+
+Understanding these patterns is crucial for building effective token estimation tools. By identifying the content type and applying appropriate correction factors, we can significantly improve the accuracy of our estimates without needing to run a full tokenizer on every piece of text.

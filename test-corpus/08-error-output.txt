@@ -1,0 +1,74 @@
+> tsc --noEmit
+
+src/components/DataTable.tsx:45:13 - error TS2322: Type 'string' is not assignable to type 'number'.
+
+45   const pageSize = props.pageSize;
+               ~~~~~~~~
+
+  node_modules/@types/react/index.d.ts:1234:5
+    1234     pageSize?: number | undefined;
+               ~~~~~~~~
+    The expected type comes from property 'pageSize' which is declared here on type 'IntrinsicAttributes & DataTableProps<unknown>'
+
+src/utils/api.ts:128:9 - error TS18048: 'response.data' is possibly 'undefined'.
+
+128   return response.data.results;
+            ~~~~~~~~~~~~~~~
+
+  src/utils/api.ts:125:30
+    125   const response = await api.get<ApiResponse>('/endpoint');
+                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Type 'ApiResponse | undefined' is possibly undefined.
+
+src/hooks/useAuth.ts:67:22 - error TS2532: Object is possibly 'undefined'.
+
+67   const userName = session.user.name;
+                        ~~~~~~~~~~~~~~~
+
+  src/hooks/useAuth.ts:65:18
+    65   const session = useSession();
+                        ~~~~~~~~
+    Make sure 'session' is defined before accessing its properties.
+
+Found 3 errors.
+
+FAIL npm run typecheck
+
+Error: Process completed with exit code 1.
+
+> npm test -- --run
+
+ RUN  v1.6.0
+
+ ✓ src/__tests__/utils.test.ts (5 tests) 45ms
+ ✓ src/__tests__/auth.test.ts (3 tests) 38ms
+ ✗ src/__tests__/api.test.ts (8 tests) 112ms
+ ✓ src/__tests__/components.test.ts (12 tests) 203ms
+
+ FAIL  src/__tests__/api.test.ts > API tests > should fetch products successfully
+ AssertionError: expected 500 to be 200 // Object.is equality
+
+ - Expected: 200
+ + Received: 500
+
+ ❯ src/__tests__/api.test.ts:42:28
+      40|   it('should fetch products successfully', async () => {
+      41|     const response = await fetchProducts();
+      42|     expect(response.status).toBe(200);
+       |                            ^
+      43|   });
+      44|   it('should handle network errors', async () => {
+
+ FAIL  src/__tests__/api.test.ts > API tests > should handle pagination
+ AssertionError: expected undefined to not be undefined
+
+ ❯ src/__tests__/api.test.ts:55:28
+      53|   it('should handle pagination', async () => {
+      54|     const result = await fetchProducts({ page: 2 });
+      55|     expect(result.data).toBeDefined();
+       |                            ^
+      56|   });
+
+ Tests:  28 passed, 4 failed
+ Files:  1 of 5 failed
+ Time:   1.23s

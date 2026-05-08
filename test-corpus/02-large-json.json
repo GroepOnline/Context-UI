@@ -1,0 +1,69 @@
+{
+  "apiVersion": "2.1.0",
+  "metadata": {
+    "generated": "2026-05-08T12:00:00Z",
+    "source": "benchmark-corpus",
+    "description": "Simulated large JSON payload for token estimation testing"
+  },
+  "users": [
+    {"id": 1, "name": "Alice Johnson", "email": "alice@example.com", "active": true, "score": 0.95, "roles": ["admin", "editor"]},
+    {"id": 2, "name": "Bob Smith", "email": "bob@example.com", "active": true, "score": 0.87, "roles": ["user"]},
+    {"id": 3, "name": "Charlie Brown", "email": "charlie@example.com", "active": false, "score": 0.45, "roles": ["user"]},
+    {"id": 4, "name": "Diana Prince", "email": "diana@example.com", "active": true, "score": 0.92, "roles": ["moderator", "editor"]},
+    {"id": 5, "name": "Eve Wilson", "email": "eve@example.com", "active": true, "score": 0.78, "roles": ["user"]},
+    {"id": 6, "name": "Frank Castle", "email": "frank@example.com", "active": false, "score": 0.33, "roles": ["user"]},
+    {"id": 7, "name": "Grace Hopper", "email": "grace@example.com", "active": true, "score": 0.99, "roles": ["admin"]},
+    {"id": 8, "name": "Henry Ford", "email": "henry@example.com", "active": true, "score": 0.71, "roles": ["editor"]},
+    {"id": 9, "name": "Ivy League", "email": "ivy@example.com", "active": false, "score": 0.52, "roles": ["user"]},
+    {"id": 10, "name": "Jack Sparrow", "email": "jack@example.com", "active": true, "score": 0.88, "roles": ["user"]}
+  ],
+  "products": [
+    {"id": "prod-001", "name": "Widget Alpha", "price": 29.99, "category": "widgets", "inStock": true, "tags": ["new", "featured"]},
+    {"id": "prod-002", "name": "Widget Beta", "price": 49.99, "category": "widgets", "inStock": true, "tags": ["popular"]},
+    {"id": "prod-003", "name": "Gadget Gamma", "price": 99.99, "category": "gadgets", "inStock": false, "tags": ["premium"]},
+    {"id": "prod-004", "name": "Gadget Delta", "price": 149.99, "category": "gadgets", "inStock": true, "tags": ["new", "premium"]},
+    {"id": "prod-005", "name": "Tool Epsilon", "price": 19.99, "category": "tools", "inStock": true, "tags": ["basic"]}
+  ],
+  "analytics": {
+    "pageViews": 1523847,
+    "uniqueVisitors": 423891,
+    "avgSessionDuration": 284.5,
+    "bounceRate": 0.342,
+    "conversionRate": 0.028,
+    "topPages": [
+      {"path": "/home", "views": 385201, "avgTime": 45.2},
+      {"path": "/products", "views": 291847, "avgTime": 120.8},
+      {"path": "/pricing", "views": 184502, "avgTime": 95.3},
+      {"path": "/docs", "views": 152384, "avgTime": 210.5},
+      {"path": "/blog", "views": 98765, "avgTime": 180.1}
+    ],
+    "deviceBreakdown": {
+      "desktop": 0.48,
+      "mobile": 0.42,
+      "tablet": 0.10
+    },
+    "browserBreakdown": {
+      "chrome": 0.62,
+      "safari": 0.20,
+      "firefox": 0.10,
+      "edge": 0.06,
+      "other": 0.02
+    }
+  },
+  "nestedData": {
+    "level1": {
+      "level2": {
+        "level3": {
+          "level4": {
+            "values": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            "metadata": {
+              "description": "Deeply nested structure to test token estimation",
+              "depth": 5,
+              "complexity": "high"
+            }
+          }
+        }
+      }
+    }
+  }
+}

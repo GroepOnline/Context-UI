@@ -1,0 +1,29 @@
+[2026-05-08T10:15:23.456Z] INFO  [server] Starting server on port 3000
+[2026-05-08T10:15:23.457Z] INFO  [server] Environment: development
+[2026-05-08T10:15:23.458Z] INFO  [database] Connecting to PostgreSQL at localhost:5432/mydb
+[2026-05-08T10:15:23.521Z] INFO  [database] Connection established (pool: 10 connections)
+[2026-05-08T10:15:23.522Z] INFO  [server] Server ready in 0.067s
+[2026-05-08T10:15:24.001Z] DEBUG [auth] Login attempt: user@example.com
+[2026-05-08T10:15:24.012Z] INFO  [auth] User logged in: usr_12345 (alice@example.com)
+[2026-05-08T10:15:24.015Z] DEBUG [api] GET /api/v1/users/me -> 200 (3ms)
+[2026-05-08T10:15:24.050Z] DEBUG [api] GET /api/v1/products -> 200 (35ms)
+[2026-05-08T10:15:24.051Z] INFO  [cache] Cache MISS for key: products:list
+[2026-05-08T10:15:24.052Z] DEBUG [database] SELECT * FROM products WHERE active = true LIMIT 50 (31ms)
+[2026-05-08T10:15:24.080Z] INFO  [cache] Cache SET for key: products:list (TTL: 300s)
+[2026-05-08T10:15:25.100Z] WARN  [api] Rate limit approaching: user usr_12345 (85/100 requests)
+[2026-05-08T10:15:25.101Z] DEBUG [api] GET /api/v1/products/featured -> 200 (20ms)
+[2026-05-08T10:15:25.200Z] ERROR [api] GET /api/v1/orders/recent -> 500 (99ms)
+[2026-05-08T10:15:25.201Z] ERROR [api] Error: Cannot read properties of undefined (reading 'userId')
+[2026-05-08T10:15:25.202Z] ERROR [api]     at OrderService.getRecentOrders (services/order.ts:42:15)
+[2026-05-08T10:15:25.202Z] ERROR [api]     at processTicksAndRejections (node:internal/process/task_queues:95:5)
+[2026-05-08T10:15:25.203Z] ERROR [api] POST /api/v1/auth/refresh -> 401 (5ms)
+[2026-05-08T10:15:25.204Z] WARN  [auth] Token refresh failed: token expired
+[2026-05-08T10:15:25.300Z] INFO  [auth] Token refreshed for user: usr_12345
+[2026-05-08T10:15:25.350Z] DEBUG [api] GET /api/v1/users/me/orders -> 200 (45ms)
+[2026-05-08T10:15:25.400Z] INFO  [cache] Cache MISS for key: user:usr_12345:orders
+[2026-05-08T10:15:25.401Z] DEBUG [database] SELECT o.*, oi.* FROM orders o JOIN order_items oi ON o.id = oi.order_id WHERE o.user_id = $1 (48ms)
+[2026-05-08T10:15:25.450Z] INFO  [cache] Cache SET for key: user:usr_12345:orders (TTL: 60s)
+[2026-05-08T10:15:26.000Z] INFO  [scheduler] Running scheduled task: cleanup-expired-sessions
+[2026-05-08T10:15:26.001Z] DEBUG [database] DELETE FROM sessions WHERE expires_at < NOW() (12ms)
+[2026-05-08T10:15:26.005Z] INFO  [scheduler] Removed 47 expired sessions
+[2026-05-08T10:15:26.006Z] INFO  [scheduler] Next run in 3600s

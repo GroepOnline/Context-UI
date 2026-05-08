@@ -1,0 +1,37 @@
+{
+  "name": "pi-context-extension",
+  "version": "1.0.0",
+  "description": "Pi.dev extension for context status and token estimation",
+  "main": "dist/extension.js",
+  "types": "dist/extension.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "node dist/test/test.js",
+    "watch": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "pi",
+    "pi.dev",
+    "extension",
+    "context",
+    "tokens"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "pi": {
+    "extension": true,
+    "commands": [
+      "/context",
+      "/ctx",
+      "/tokens"
+    ]
+  }
+}

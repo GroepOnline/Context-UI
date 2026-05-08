@@ -1,0 +1,77 @@
+diff --git a/src/components/DataTable.tsx b/src/components/DataTable.tsx
+index a1b2c3d..e4f5g6h 100644
+--- a/src/components/DataTable.tsx
++++ b/src/components/DataTable.tsx
+@@ -1,5 +1,6 @@
+ import React, { useState, useMemo } from 'react';
+ import { ChevronUp, ChevronDown, ChevronsUpDown, Search } from 'lucide-react';
++import { useDebounce } from '~/hooks/useDebounce';
+ 
+ interface Column<T> {
+   key: keyof T;
+@@ -12,6 +13,7 @@ interface DataTableProps<T> {
+   columns: Column<T>[];
+   data: T[];
+   pageSize?: number;
++  searchable?: boolean;
+ }
+ 
+ export function DataTable<T>({
+@@ -20,6 +22,7 @@ export function DataTable<T>({
+   data,
+   pageSize = 10,
++  searchable = false,
+ }: DataTableProps<T>) {
+   const [sortKey, setSortKey] = useState<keyof T | null>(null);
+   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+@@ -27,23 +30,43 @@ export function DataTable<T>({
+   const [currentPage, setCurrentPage] = useState(1);
+   const [searchQuery, setSearchQuery] = useState('');
++  const debouncedSearch = useDebounce(searchQuery, 300);
+ 
+   const filteredData = useMemo(() => {
+-    if (!searchQuery) return data;
++    if (!searchQuery && !debouncedSearch) return data;
+     return data.filter((item) =>
+       columns.some((col) =>
+-        String(item[col.key]).toLowerCase().includes(searchQuery.toLowerCase())
++        String(item[col.key]).toLowerCase().includes(debouncedSearch.toLowerCase())
+       )
+     );
+-  }, [data, columns, searchQuery]);
++  }, [data, columns, debouncedSearch]);
++
++  // If searchable prop is true, show the search input
++  const showSearch = searchable;
+ 
+   return (
+     <div className="w-full overflow-x-auto">
+-      <div className="mb-4">
+-        <div className="relative">
+-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+-          <input
+-            type="text"
++      {showSearch && (
++        <div className="mb-4">
++          <div className="relative">
++            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
++            <input
++              type="text"
++              placeholder="Search..."
++              value={searchQuery}
++              onChange={(e) => {
++                setSearchQuery(e.target.value);
++                setCurrentPage(1);
++              }}
++              className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
++            />
++          </div>
++        </div>
++      )}
++      {!showSearch && (
++        <div className="mb-4">
++          <input
++            type="hidden"
+             placeholder="Search..."
+             value={searchQuery}
+             onChange={(e) => {
