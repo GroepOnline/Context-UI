@@ -1,1 +1,2 @@
 {"type": "config", "name": "token-accuracy", "metricName": "mape", "metricUnit": "percentage", "bestDirection": "lower", "created": 1778252014750}
+{"run": 1, "commit": "cf77692", "metric": 18.19, "metrics": {"mae": 145.0, "bias": -51.4}, "status": "keep", "description": "baseline chars/4 approximation (code_weight=1.2)", "timestamp": 0, "segment": 0, "asi": {"hypothesis": "chars/4 baseline", "code_weight": 1.2, "chars_per_token": 4.0}}

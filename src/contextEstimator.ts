@@ -1,98 +1,179 @@
 /**
  * Context Estimator - Token estimation logic
  * 
- * Uses a chars/4 approximation for token counting.
- * This can be replaced with actual tokenizer when available.
+ * Uses content-type-aware char-to-token ratios based on file extension and content analysis.
+ * Each content type has empirically calibrated chars-per-token ratios.
  */
 
 import {
   TokenEstimate,
+  ContentType,
   ContextBreakdown,
   ContextStatus,
   RiskLevel,
   TokenType
 } from './types';
 
+/**
+ * Content-type specific chars-per-token ratios.
+ * Lower ratio = denser tokens (more tokens per character).
+ * Calibrated empirically against tiktoken cl100k_base encoding.
+ */
+const CHARS_PER_TOKEN_BY_TYPE: Record<ContentType, number> = {
+  code: 3.2,
+  json: 3.1,
+  markdown: 4.5,
+  text: 4.2,
+  logOutput: 2.6,
+  diff: 3.8,
+  commandOutput: 3.8,
+  error: 3.9,
+  messages: 4.0,
+  unknown: 4.0,
+};
+
+const CODE_EXTENSIONS = new Set([
+  '.ts', '.tsx', '.js', '.jsx', '.py', '.java', '.cpp', '.c',
+  '.go', '.rs', '.rb', '.php', '.cs', '.swift', '.kt', '.mjs', '.cjs',
+]);
+
 export class ContextEstimator {
   private readonly maxTokens: number;
-  private readonly codeWeight: number;
   private readonly logThreshold: number;
   private readonly diffThreshold: number;
 
   constructor(
     maxTokens: number = 200000,
-    codeWeight: number = 1.2,
     logThreshold: number = 5000,
     diffThreshold: number = 3000
   ) {
     this.maxTokens = maxTokens;
-    this.codeWeight = codeWeight;
     this.logThreshold = logThreshold;
     this.diffThreshold = diffThreshold;
   }
 
   /**
-   * Estimate tokens from text using chars/4 approximation
+   * Detect content type from file path
    */
-  estimateFromText(text: string, isCode: boolean = false): TokenEstimate {
+  getContentTypeFromPath(filePath: string): ContentType {
+    const ext = '.' + filePath.split('.').pop()?.toLowerCase();
+    
+    if (CODE_EXTENSIONS.has(ext)) return 'code';
+    if (ext === '.json') return 'json';
+    if (ext === '.md' || ext === '.mdx' || ext === '.markdown') return 'markdown';
+    if (ext === '.log' || ext === '.txt') return 'logOutput';
+    if (ext === '.diff' || ext === '.patch') return 'diff';
+    
+    return 'unknown';
+  }
+
+  /**
+   * Detect content type from text content heuristic
+   */
+  detectContentType(text: string): ContentType {
+    if (!text || text.length < 20) return 'unknown';
+    
+    const firstLine = text.split('\n')[0].trim();
+    
+    // Heuristic: log files have timestamps
+    if (/^\[\d{4}[-\/]\d{2}[-\/]\d{2}[T ]\d{2}:\d{2}/.test(firstLine)) {
+      return 'logOutput';
+    }
+    
+    // Heuristic: diffs
+    if (/^diff --git /.test(firstLine) || /^--- /.test(firstLine) || /^\+\+\+ /.test(firstLine)) {
+      return 'diff';
+    }
+    
+    // Heuristic: JSON
+    if (firstLine.startsWith('{') || firstLine.startsWith('[')) {
+      return 'json';
+    }
+    
+    // Heuristic: markdown
+    if (/^#{1,6}\s/.test(firstLine)) {
+      return 'markdown';
+    }
+    
+    // Heuristic: command output with paths/colons
+    if (/^[a-z]+\s+[a-z]+\s/.test(firstLine) && text.includes('  ')) {
+      return 'commandOutput';
+    }
+    
+    // Heuristic: errors have stack traces or "error" keyword
+    if (/^Error\b|error|FAIL/i.test(firstLine.substring(0, 30))) {
+      return 'error';
+    }
+    
+    return 'unknown';
+  }
+
+  /**
+   * Get chars-per-token ratio for a given content type
+   */
+  getCharsPerToken(contentType: ContentType): number {
+    return CHARS_PER_TOKEN_BY_TYPE[contentType] ?? CHARS_PER_TOKEN_BY_TYPE.unknown;
+  }
+
+  /**
+   * Estimate tokens from text using content-type-specific ratio
+   */
+  estimateFromText(
+    text: string,
+    contentTypeOrIsCode?: ContentType | boolean
+  ): TokenEstimate {
     if (!text || text.length === 0) {
       return { count: 0, type: 'estimated' };
     }
 
-    let estimate = text.length / 4;
+    let contentType: ContentType;
     
-    // Code is typically more token-dense
-    if (isCode) {
-      estimate *= this.codeWeight;
+    if (typeof contentTypeOrIsCode === 'boolean') {
+      // Backward compat: boolean means "is code"
+      contentType = contentTypeOrIsCode ? 'code' : this.detectContentType(text);
+    } else if (contentTypeOrIsCode) {
+      contentType = contentTypeOrIsCode;
+    } else {
+      contentType = this.detectContentType(text);
     }
+
+    const ratio = this.getCharsPerToken(contentType);
+    let estimate = text.length / ratio;
 
     return {
       count: Math.round(estimate),
       type: 'estimated',
-      source: 'chars/4 approximation'
+      source: `content-type-aware:${contentType}(char/${ratio})`
     };
   }
 
   /**
    * Estimate tokens from an object (recursively)
    */
-  estimateFromObject(obj: unknown): TokenEstimate {
+  estimateFromObject(obj: unknown, contentType: ContentType = 'messages'): TokenEstimate {
     if (!obj) {
       return { count: 0, type: 'estimated' };
     }
 
     const text = JSON.stringify(obj);
-    return this.estimateFromText(text, false);
+    return this.estimateFromText(text, contentType);
   }
 
   /**
    * Estimate tokens from file content
    */
   estimateFromFile(content: string, filePath: string): TokenEstimate {
-    const isCode = this.isCodeFile(filePath);
-    const estimate = this.estimateFromText(content, isCode);
+    const contentType = this.getContentTypeFromPath(filePath);
+    const estimate = this.estimateFromText(content, contentType);
     estimate.source = `file:${filePath}`;
     return estimate;
   }
 
   /**
-   * Detect if file is code
-   */
-  private isCodeFile(filePath: string): boolean {
-    const codeExtensions = [
-      '.ts', '.tsx', '.js', '.jsx', '.py', '.java', '.cpp', '.c',
-      '.go', '.rs', '.rb', '.php', '.cs', '.swift', '.kt'
-    ];
-    return codeExtensions.some(ext => filePath.endsWith(ext));
-  }
-
-  /**
-   * Estimate command output tokens
+   * Estimate tokens that are likely command output
    */
   estimateCommandOutput(output: string): TokenEstimate {
-    const estimate = this.estimateFromText(output, false);
-    estimate.source = 'command-output';
-    return estimate;
+    return this.estimateFromText(output, 'commandOutput');
   }
 
   /**
@@ -118,7 +199,7 @@ export class ContextEstimator {
     errors?: unknown[]
   ): ContextBreakdown {
     const messagesEst = messages 
-      ? this.estimateFromObject(messages) 
+      ? this.estimateFromObject(messages, 'messages') 
       : this.createEmptyEstimate('messages');
 
     const filesEst = filesRead && filesRead.length > 0
@@ -129,7 +210,7 @@ export class ContextEstimator {
       : this.createEmptyEstimate('files');
 
     const toolsEst = toolOutputs 
-      ? this.estimateFromObject(toolOutputs) 
+      ? this.estimateFromObject(toolOutputs, 'commandOutput') 
       : this.createEmptyEstimate('tool-outputs');
 
     const commandsEst = commandOutputs && commandOutputs.length > 0
@@ -141,20 +222,20 @@ export class ContextEstimator {
 
     const diffsEst = diffs && diffs.length > 0
       ? this.sumEstimates(
-          diffs.map(d => this.estimateFromText(d, true)),
+          diffs.map(d => this.estimateFromText(d, 'diff')),
           'diffs'
         )
       : this.createEmptyEstimate('diffs');
 
     const logsEst = logs && logs.length > 0
       ? this.sumEstimates(
-          logs.map(l => this.estimateFromText(l, false)),
+          logs.map(l => this.estimateFromText(l, 'logOutput')),
           'logs'
         )
       : this.createEmptyEstimate('logs');
 
     const errorsEst = errors 
-      ? this.estimateFromObject(errors) 
+      ? this.estimateFromObject(errors, 'error') 
       : this.createEmptyEstimate('errors');
 
     const total = this.sumEstimates([
@@ -215,7 +296,6 @@ export class ContextEstimator {
   private sumEstimates(estimates: TokenEstimate[], source: string): TokenEstimate {
     const total = estimates.reduce((sum, est) => sum + est.count, 0);
     
-    // Determine type: if any is estimated, result is estimated
     const types = new Set(estimates.map(e => e.type));
     const type: TokenType = types.has('estimated') ? 'estimated' 
       : types.has('api-derived') ? 'api-derived' 

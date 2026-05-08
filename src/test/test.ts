@@ -39,14 +39,26 @@ test('ContextEstimator - estimateFromText basic', () => {
   assert(result.source !== undefined, 'Should have source');
 });
 
-test('ContextEstimator - estimateFromText code weighting', () => {
+test('ContextEstimator - content type ratios', () => {
   const estimator = new ContextEstimator();
   const text = 'const x = 42;';
   
-  const normalEst = estimator.estimateFromText(text, false);
-  const codeEst = estimator.estimateFromText(text, true);
+  const normalEst = estimator.estimateFromText(text);
+  const codeEst = estimator.estimateFromText(text, 'code');
   
-  assert(codeEst.count > normalEst.count, 'Code should be weighted higher');
+  assert(normalEst.count > 0, 'Should have positive count');
+  // Code ratio (3.2) is tighter than default (4.0ish), so codeEst > normalEst
+  assert(codeEst.count > normalEst.count, 'Code should have more tokens than default');
+});
+
+test('ContextEstimator - content type detection', () => {
+  const estimator = new ContextEstimator();
+  
+  // Content detection by path
+  assert(estimator.getContentTypeFromPath('test.ts') === 'code', '.ts should be code');
+  assert(estimator.getContentTypeFromPath('data.json') === 'json', '.json should be json');
+  assert(estimator.getContentTypeFromPath('doc.md') === 'markdown', '.md should be markdown');
+  assert(estimator.getContentTypeFromPath('output.log') === 'logOutput', '.log should be logOutput');
 });
 
 test('ContextEstimator - calculateRisk levels', () => {
