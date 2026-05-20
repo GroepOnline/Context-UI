@@ -18,7 +18,7 @@ import { createPiAPI, buildCommandContext } from './piAdapter';
 export class ContextExtension implements PiExtension {
   name = 'pi-context-extension';
   version = '1.0.0';
-  description = 'Context status, token estimation and working set overview (/context, /ctx, /tokens)';
+  description = 'Context status, token estimation and working set overview (/context, /ctx, /tokens) with a fun twist (/context fun)';
   commands = ['/context', '/ctx', '/tokens'];
 
   private api: PiExtensionAPI | null = null;
@@ -104,6 +104,8 @@ export class ContextExtension implements PiExtension {
         return 'files';
       case 'summary':
         return 'summary';
+      case 'fun':
+        return 'fun';
       default:
         return 'default';
     }
