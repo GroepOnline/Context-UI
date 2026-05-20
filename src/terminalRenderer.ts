@@ -405,33 +405,37 @@ export class TerminalRenderer {
   }
 
   private truncateVisible(text: string, maxVisibleChars: number): string {
-    if (this.visibleLength(text) <= maxVisibleChars) return text;
+    if (text.length <= maxVisibleChars) return text;
+
+    // Fast pre-check: strip ANSI codes using replace
+    const stripped = text.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
+    if (stripped.length <= maxVisibleChars) return text;
 
     const ellipsis = '...';
     const target = Math.max(0, maxVisibleChars - ellipsis.length);
-    let out = '';
     let visible = 0;
+    let endIdx = 0;
 
     for (let i = 0; i < text.length; i++) {
-      const ch = text[i];
-
-      if (ch === '\x1b') {
-        const match = text.slice(i).match(/^\x1B\[[0-9;]*m/);
-        if (match) {
-          out += match[0];
-          i += match[0].length - 1;
+      // 27 is the char code for \x1b
+      if (text.charCodeAt(i) === 27) {
+        const mIdx = text.indexOf('m', i);
+        // ANSI escape codes can be longer, especially true-color or combined codes
+        // We only require that an 'm' exists after the escape and is reasonably close
+        if (mIdx !== -1 && mIdx - i < 50) {
+          i = mIdx;
           continue;
         }
       }
 
       if (visible < target) {
-        out += ch;
         visible += 1;
       } else {
+        endIdx = i;
         break;
       }
     }
 
-    return `${out}${ellipsis}`;
+    return text.substring(0, endIdx) + ellipsis;
   }
 }
