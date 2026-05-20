@@ -4,7 +4,7 @@
 
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
-export type ContextMode = 'default' | 'compact' | 'tokens' | 'files' | 'summary';
+export type ContextMode = 'default' | 'compact' | 'tokens' | 'files' | 'summary' | 'fun';
 
 export type TokenType = 'exact' | 'api-derived' | 'estimated';
 

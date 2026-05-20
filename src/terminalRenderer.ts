@@ -58,6 +58,8 @@ export class TerminalRenderer {
         return this.renderFiles(report.workingSet);
       case 'summary':
         return this.renderSummary(report);
+      case 'fun':
+        return this.renderFun();
       default:
         return this.renderDefault(report);
     }
@@ -267,6 +269,36 @@ export class TerminalRenderer {
     lines.push(this.makeFooter());
     lines.push('');
     lines.push(`${DIM}Copy this summary to continue in a new session.${RESET}`);
+
+    return lines.join('\n');
+  }
+
+  // ================================================================
+  //  MODE: fun (easter egg / cute extension feature)
+  // ================================================================
+
+  private renderFun(): string {
+    const lines: string[] = [];
+
+    const quotes = [
+      "There are 10 types of people in the world: those who understand binary, and those who don't.",
+      "A SQL query goes into a bar, walks up to two tables and asks... 'Can I join you?'",
+      "How many programmers does it take to change a light bulb? None, that's a hardware problem.",
+      "To understand what recursion is, you must first understand recursion.",
+      "I would love to change the world, but they won't give me the source code."
+    ];
+    const quote = quotes[Math.floor(Math.random() * quotes.length)];
+
+    lines.push(this.makeHeader('Fun Developer Skill'));
+    lines.push(this.makeLine(` ${CYAN}   .----.   ${RESET}`));
+    lines.push(this.makeLine(` ${CYAN}  / .--. \\  ${RESET}`));
+    lines.push(this.makeLine(` ${CYAN}  | |__| |  ${RESET}  ${BOLD}Hi there!${RESET}`));
+    lines.push(this.makeLine(` ${CYAN}  |  ..  |  ${RESET}`));
+    lines.push(this.makeLine(` ${CYAN}  '----''   ${RESET}`));
+    lines.push(this.makeSep());
+    lines.push(this.makeLine(` ${DIM}Quote of the day:${RESET}`));
+    lines.push(this.makeLine(` "${quote}"`));
+    lines.push(this.makeFooter());
 
     return lines.join('\n');
   }
