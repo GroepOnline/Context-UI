@@ -74,7 +74,8 @@ export class ContextEstimator {
   detectContentType(text: string): ContentType {
     if (!text || text.length < 20) return 'unknown';
     
-    const firstLine = text.split('\n')[0].trim();
+    const nlIndex = text.indexOf('\n');
+    const firstLine = (nlIndex === -1 ? text : text.substring(0, nlIndex)).trim();
     
     // Heuristic: log files have timestamps
     if (/^\[\d{4}[-\/]\d{2}[-\/]\d{2}[T ]\d{2}:\d{2}/.test(firstLine)) {
@@ -131,8 +132,14 @@ export class ContextEstimator {
     let digits = 0;
     let symbols = 0;
     
-    for (const ch of text) {
-      const code = ch.charCodeAt(0);
+    // Sample maximum 100k characters for density to avoid slow loop on huge files
+    const len = Math.min(text.length, 100000);
+    const step = Math.max(1, Math.floor(text.length / 100000));
+
+    let count = 0;
+    for (let i = 0; i < text.length; i += step) {
+      if (count >= len) break;
+      const code = text.charCodeAt(i);
       if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122)) {
         letters++;
       } else if (code === 32 || code === 9 || code === 10 || code === 13) {
@@ -142,9 +149,10 @@ export class ContextEstimator {
       } else {
         symbols++;
       }
+      count++;
     }
     
-    const total = text.length;
+    const total = count;
     const symbolRatio = symbols / total;
     const whitespaceRatio = whitespace / total;
     const letterRatio = letters / total;
