@@ -1,0 +1,222 @@
+"use strict";
+/**
+ * Working Set Analyzer - Analyzes active context and working set
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.WorkingSetAnalyzer = void 0;
+const contextEstimator_1 = require("./contextEstimator");
+class WorkingSetAnalyzer {
+    estimator;
+    maxFilesToShow;
+    maxCommandsToShow;
+    largeConsumerThreshold;
+    constructor(estimator, maxFilesToShow = 10, maxCommandsToShow = 5, largeConsumerThreshold = 5000) {
+        this.estimator = estimator || new contextEstimator_1.ContextEstimator();
+        this.maxFilesToShow = maxFilesToShow;
+        this.maxCommandsToShow = maxCommandsToShow;
+        this.largeConsumerThreshold = largeConsumerThreshold;
+    }
+    /**
+     * Analyze working set from Pi command context
+     */
+    analyze(context) {
+        const files = this.analyzeFiles(context);
+        const commands = this.analyzeCommands(context);
+        const errors = this.analyzeErrors(context);
+        const largeConsumers = this.findLargeConsumers(context, files, commands);
+        return {
+            task: context.currentTask,
+            files,
+            commands,
+            errors,
+            largeConsumers,
+            todos: this.extractTodos(context)
+        };
+    }
+    /**
+     * Analyze files that are likely in context
+     */
+    analyzeFiles(context) {
+        if (!context.filesRead || context.filesRead.length === 0) {
+            return [];
+        }
+        const fileMap = new Map();
+        // Deduplicate and categorize
+        for (const file of context.filesRead) {
+            const path = typeof file === 'string' ? file : String(file);
+            if (fileMap.has(path)) {
+                // Already seen, increment reason
+                const existing = fileMap.get(path);
+                existing.reason = 'Multiple accesses';
+            }
+            else {
+                fileMap.set(path, {
+                    path,
+                    reason: 'Recently accessed',
+                    tokenEstimate: this.estimateFileTokens(path)
+                });
+            }
+        }
+        // Sort by token estimate (descending)
+        return Array.from(fileMap.values())
+            .sort((a, b) => (b.tokenEstimate || 0) - (a.tokenEstimate || 0))
+            .slice(0, this.maxFilesToShow);
+    }
+    /**
+     * Analyze commands executed
+     */
+    analyzeCommands(context) {
+        if (!context.commandOutputs || context.commandOutputs.length === 0) {
+            return [];
+        }
+        return context.commandOutputs
+            .map(cmd => {
+            const outputSize = this.estimateCommandSize(cmd);
+            return {
+                command: this.extractCommandName(cmd),
+                outputSize
+            };
+        })
+            .sort((a, b) => (b.outputSize || 0) - (a.outputSize || 0))
+            .slice(0, this.maxCommandsToShow);
+    }
+    /**
+     * Analyze errors from context
+     */
+    analyzeErrors(context) {
+        const errors = [];
+        // Try to extract errors from recent messages
+        if (context.recentMessages) {
+            for (const msg of context.recentMessages) {
+                const errorMsg = this.extractErrorMessage(msg);
+                if (errorMsg) {
+                    errors.push({
+                        message: errorMsg,
+                        timestamp: Date.now()
+                    });
+                }
+            }
+        }
+        return errors;
+    }
+    /**
+     * Find large context consumers
+     */
+    findLargeConsumers(context, files, commands) {
+        const consumers = [];
+        // Check files
+        for (const file of files) {
+            if ((file.tokenEstimate || 0) > this.largeConsumerThreshold) {
+                consumers.push(`Large file: ${this.shortenPath(file.path)}`);
+            }
+        }
+        // Check commands
+        for (const cmd of commands) {
+            if ((cmd.outputSize || 0) > this.largeConsumerThreshold) {
+                consumers.push(`Large output: ${cmd.command}`);
+            }
+        }
+        // Check tool outputs
+        if (context.toolOutputs && Array.isArray(context.toolOutputs)) {
+            for (let i = 0; i < context.toolOutputs.length; i++) {
+                const output = context.toolOutputs[i];
+                const size = this.estimateObjectSize(output);
+                if (size > this.largeConsumerThreshold) {
+                    consumers.push(`Large tool output #${i + 1}`);
+                }
+            }
+        }
+        return consumers;
+    }
+    /**
+     * Extract TODO items from context
+     */
+    extractTodos(context) {
+        // Try to find TODOs in recent messages
+        const todos = [];
+        const todoPattern = /(?:TODO|FIXME|XXX):\s*(.+)/gi;
+        if (context.recentMessages) {
+            for (const msg of context.recentMessages) {
+                const msgStr = JSON.stringify(msg);
+                let match;
+                while ((match = todoPattern.exec(msgStr)) !== null) {
+                    todos.push(match[1].trim());
+                }
+            }
+        }
+        return todos.length > 0 ? todos : undefined;
+    }
+    /**
+     * Helper: Estimate file tokens from path using content-type-aware ratio.
+     * Returns a rough token estimate based on the file type and average file sizes.
+     */
+    estimateFileTokens(path) {
+        const contentType = this.estimator.getContentTypeFromPath(path);
+        const ratio = this.estimator.getCharsPerToken(contentType);
+        // Estimate average file size by extension (empirical averages)
+        const ext = path.split('.').pop()?.toLowerCase() || '';
+        const avgSize = {
+            ts: 8000, tsx: 8000, js: 6000, jsx: 6000,
+            py: 5000, java: 5000, cpp: 5000, c: 4000,
+            go: 5000, rs: 5000, rb: 3000, php: 4000,
+            cs: 5000, swift: 5000, kt: 5000,
+            json: 4000, md: 3000, log: 20000, txt: 5000,
+            diff: 3000, patch: 3000,
+        };
+        const chars = avgSize[ext] ?? 4000;
+        const density = Math.min(1.3, Math.max(0.8, (chars / 4000) * 0.3 + 0.7));
+        return Math.round((chars / ratio) * density);
+    }
+    /**
+     * Helper: Estimate command output size
+     */
+    estimateCommandSize(cmd) {
+        return cmd.length / 4;
+    }
+    /**
+     * Helper: Extract command name from output
+     */
+    extractCommandName(output) {
+        // Try to find command name in output
+        const firstLine = output.split('\n')[0];
+        if (firstLine.length < 50) {
+            return firstLine;
+        }
+        return firstLine.substring(0, 47) + '...';
+    }
+    /**
+     * Helper: Extract error message from object
+     */
+    extractErrorMessage(obj) {
+        if (!obj || typeof obj !== 'object')
+            return null;
+        const objAny = obj;
+        // Check common error patterns
+        if (objAny.error)
+            return String(objAny.error);
+        if (objAny.message && objAny.message.includes('error')) {
+            return objAny.message;
+        }
+        if (objAny.stderr)
+            return String(objAny.stderr).substring(0, 100);
+        return null;
+    }
+    /**
+     * Helper: Estimate object size
+     */
+    estimateObjectSize(obj) {
+        if (!obj)
+            return 0;
+        return JSON.stringify(obj).length / 4;
+    }
+    /**
+     * Helper: Shorten path for display
+     */
+    shortenPath(path) {
+        const parts = path.split(/[/\\]/);
+        if (parts.length <= 2)
+            return path;
+        return '.../' + parts.slice(-2).join('/');
+    }
+}
+exports.WorkingSetAnalyzer = WorkingSetAnalyzer;
