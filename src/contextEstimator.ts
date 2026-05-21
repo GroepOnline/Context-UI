@@ -22,15 +22,15 @@ import {
 const CHARS_PER_TOKEN_BY_TYPE: Record<ContentType, number> = {
   // Calibrated via grid search against tiktoken cl100k_base
   code: 4.0,
-  json: 4.5,
+  json: 3.8,
   markdown: 4.2,
   text: 3.6,
-  logOutput: 2.6,
-  diff: 3.8,
-  commandOutput: 4.2,
-  error: 4.5,
+  logOutput: 2.2,
+  diff: 3.4,
+  commandOutput: 3.8,
+  error: 3.9,
   messages: 4.0,
-  unknown: 4.8,
+  unknown: 3.6,
 };
 
 const CODE_EXTENSIONS = new Set([
@@ -62,7 +62,7 @@ export class ContextEstimator {
     if (CODE_EXTENSIONS.has(ext)) return 'code';
     if (ext === '.json') return 'json';
     if (ext === '.md' || ext === '.mdx' || ext === '.markdown') return 'markdown';
-    if (ext === '.log') return 'logOutput';
+    if (ext === '.log' || ext === '.txt') return 'logOutput';
     if (ext === '.diff' || ext === '.patch') return 'diff';
     
     return 'unknown';
