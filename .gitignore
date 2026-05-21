@@ -1,10 +1,7 @@
 node_modules/
-dist/
+.dist/
 *.log
-.DS_Store
-.env
-.vscode/
-*.tsbuildinfo
 __pycache__/
 *.pyc
-grid_search*.py
+*.pyo
+.DS_Store
