@@ -70,7 +70,7 @@ def compute_metrics(corpus: dict[str, str], code_weight: float = 1.2,
     abs_errors = []
     errors = []
     
-    for fname, text in corpus:
+    for fname, text in corpus.items():
         true_count = count_tokens(text)
         is_code = is_code_file(fname)
         
