@@ -1,301 +1,295 @@
 "use strict";
 /**
- * Context Estimator - Token estimation logic
+ * Context Estimator — Token estimation engine for Pi.dev context tracking.
  *
- * Uses content-type-aware char-to-token ratios based on file extension and content analysis.
- * Each content type has empirically calibrated chars-per-token ratios.
+ * Estimates token counts from text, files, messages, commands,
+ * and tool outputs. Uses content-type–aware character-to-token
+ * ratios to approximate LLM token consumption.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ContextEstimator = void 0;
+const DEFAULT_WINDOW_TOKENS = 200_000;
 /**
- * Content-type specific chars-per-token ratios.
- * Lower ratio = denser tokens (more tokens per character).
- * Calibrated empirically against tiktoken cl100k_base encoding.
+ * Characters-per-token ratios by content type.
+ * Lower ratio = tighter packing = more tokens per character.
  */
-const CHARS_PER_TOKEN_BY_TYPE = {
-    // Calibrated via grid search against tiktoken cl100k_base
+const CHARS_PER_TOKEN = {
     code: 4.0,
-    json: 4.5,
-    markdown: 4.2,
-    text: 3.6,
+    json: 3.5,
+    markdown: 3.8,
+    text: 4.0,
     logOutput: 2.6,
-    diff: 3.8,
-    commandOutput: 4.2,
-    error: 4.5,
-    messages: 4.0,
-    unknown: 4.8,
+    diff: 4.5,
+    commandOutput: 3.0,
+    error: 4.0,
+    messages: 3.8,
+    unknown: 4.0,
 };
-const CODE_EXTENSIONS = new Set([
-    '.ts', '.tsx', '.js', '.jsx', '.py', '.java', '.cpp', '.c',
-    '.go', '.rs', '.rb', '.php', '.cs', '.swift', '.kt', '.mjs', '.cjs',
-]);
+const EXTENSION_MAP = {
+    ts: 'code',
+    tsx: 'code',
+    js: 'code',
+    jsx: 'code',
+    py: 'code',
+    rb: 'code',
+    go: 'code',
+    rs: 'code',
+    java: 'code',
+    cs: 'code',
+    cpp: 'code',
+    c: 'code',
+    h: 'code',
+    swift: 'code',
+    kt: 'code',
+    php: 'code',
+    json: 'json',
+    md: 'markdown',
+    mdx: 'markdown',
+    log: 'logOutput',
+    diff: 'diff',
+    patch: 'diff',
+    txt: 'text',
+};
 class ContextEstimator {
     maxTokens;
-    logThreshold;
-    diffThreshold;
-    constructor(maxTokens = 200000, logThreshold = 5000, diffThreshold = 3000) {
+    constructor(maxTokens = DEFAULT_WINDOW_TOKENS) {
         this.maxTokens = maxTokens;
-        this.logThreshold = logThreshold;
-        this.diffThreshold = diffThreshold;
     }
+    // ==================================================================
+    //  PUBLIC API
+    // ==================================================================
     /**
-     * Detect content type from file path
+     * Estimate token count from raw text, optionally specifying a content
+     * type to use the appropriate character-to-token ratio.
      */
-    getContentTypeFromPath(filePath) {
-        const ext = '.' + filePath.split('.').pop()?.toLowerCase();
-        if (CODE_EXTENSIONS.has(ext))
-            return 'code';
-        if (ext === '.json')
-            return 'json';
-        if (ext === '.md' || ext === '.mdx' || ext === '.markdown')
-            return 'markdown';
-        if (ext === '.log')
-            return 'logOutput';
-        if (ext === '.diff' || ext === '.patch')
-            return 'diff';
-        return 'unknown';
-    }
-    /**
-     * Detect content type from text content heuristic
-     */
-    detectContentType(text) {
-        if (!text || text.length < 20)
-            return 'unknown';
-        const firstLine = text.split('\n')[0].trim();
-        // Heuristic: log files have timestamps
-        if (/^\[\d{4}[-\/]\d{2}[-\/]\d{2}[T ]\d{2}:\d{2}/.test(firstLine)) {
-            return 'logOutput';
-        }
-        // Heuristic: diffs
-        if (/^diff --git /.test(firstLine) || /^--- /.test(firstLine) || /^\+\+\+ /.test(firstLine)) {
-            return 'diff';
-        }
-        // Heuristic: JSON
-        if (firstLine.startsWith('{') || firstLine.startsWith('[')) {
-            return 'json';
-        }
-        // Heuristic: markdown
-        if (/^#{1,6}\s/.test(firstLine)) {
-            return 'markdown';
-        }
-        // Heuristic: command output with paths/colons
-        if (/^[a-z]+\s+[a-z]+\s/.test(firstLine) && text.includes('  ')) {
-            return 'commandOutput';
-        }
-        // Heuristic: errors have stack traces or "error" keyword
-        if (/^Error\b|error|FAIL/i.test(firstLine.substring(0, 30))) {
-            return 'error';
-        }
-        return 'unknown';
-    }
-    /**
-     * Get chars-per-token ratio for a given content type
-     */
-    getCharsPerToken(contentType) {
-        return CHARS_PER_TOKEN_BY_TYPE[contentType] ?? CHARS_PER_TOKEN_BY_TYPE.unknown;
-    }
-    /**
-     * Analyze character distribution to compute a density penalty.
-     * Returns a multiplier: >1 means denser (more tokens), <1 means sparser.
-     *
-     * Texts with high symbol density (brackets, operators, punctuation)
-     * get more tokens per char. Texts with mostly letters/whitespace get fewer.
-     */
-    analyzeCharacterDensity(text) {
-        if (!text || text.length < 10)
-            return 1.0;
-        let letters = 0;
-        let whitespace = 0;
-        let digits = 0;
-        let symbols = 0;
-        for (const ch of text) {
-            const code = ch.charCodeAt(0);
-            if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122)) {
-                letters++;
-            }
-            else if (code === 32 || code === 9 || code === 10 || code === 13) {
-                whitespace++;
-            }
-            else if (code >= 48 && code <= 57) {
-                digits++;
-            }
-            else {
-                symbols++;
-            }
-        }
-        const total = text.length;
-        const symbolRatio = symbols / total;
-        const whitespaceRatio = whitespace / total;
-        const letterRatio = letters / total;
-        // High symbol density => more tokens (brackets, operators split into separate tokens)
-        // High letter density => fewer tokens (common words are single tokens)
-        // High whitespace => fewer tokens (often just formatting)
-        // Baseline multiplier: 1.0
-        // Calibrated via grid search against tiktoken cl100k_base
-        // Optimal coefficients: symbol=0.9, letter=-0.2, whitespace=-0.15
-        let density = 1.0;
-        // Symbols increase density (each symbol is often its own token)
-        density += symbolRatio * 0.9;
-        // Letters decrease density (common words are single tokens)
-        density -= letterRatio * 0.2;
-        // Whitespace slightly decreases density
-        density -= whitespaceRatio * 0.15;
-        return Math.max(0.7, Math.min(1.5, density));
-    }
-    /**
-     * Estimate tokens from text using content-type-based ratio with
-     * character-distribution refinement.
-     */
-    estimateFromText(text, contentTypeOrIsCode) {
-        if (!text || text.length === 0) {
-            return { count: 0, type: 'estimated' };
-        }
-        let contentType;
-        if (typeof contentTypeOrIsCode === 'boolean') {
-            // Backward compat: boolean means "is code"
-            contentType = contentTypeOrIsCode ? 'code' : this.detectContentType(text);
-        }
-        else if (contentTypeOrIsCode) {
-            contentType = contentTypeOrIsCode;
-        }
-        else {
-            contentType = this.detectContentType(text);
-        }
-        const ratio = this.getCharsPerToken(contentType);
-        // Compute density adjustment from character distribution
-        const density = this.analyzeCharacterDensity(text);
-        // Adjust ratio based on density: denser text = lower ratio = more tokens
-        const adjustedRatio = ratio / density;
-        let estimate = text.length / adjustedRatio;
+    estimateFromText(text, contentType) {
+        const type = contentType
+            ? this.resolveContentType(contentType)
+            : this.detectContentType(text);
+        const ratio = this.getCharsPerToken(type);
+        const count = this.computeTokens(text.length, ratio);
         return {
-            count: Math.round(estimate),
+            count,
             type: 'estimated',
-            source: `char-density:${contentType}(ratio=${ratio.toFixed(1)},density=${density.toFixed(2)})`
+            source: `${type}-${ratio}`,
         };
     }
     /**
-     * Estimate tokens from an object (recursively)
+     * Detect the content type category for a file path based on its extension.
      */
-    estimateFromObject(obj, contentType = 'messages') {
-        if (!obj) {
-            return { count: 0, type: 'estimated' };
-        }
-        const text = JSON.stringify(obj);
-        return this.estimateFromText(text, contentType);
+    getContentTypeFromPath(filePath) {
+        const parts = filePath.split('.');
+        if (parts.length < 2)
+            return 'unknown';
+        const ext = parts[parts.length - 1].toLowerCase();
+        return EXTENSION_MAP[ext] ?? 'unknown';
     }
     /**
-     * Estimate tokens from file content
+     * Return the characters-per-token ratio for a given content type.
      */
-    estimateFromFile(content, filePath) {
-        const contentType = this.getContentTypeFromPath(filePath);
-        const estimate = this.estimateFromText(content, contentType);
-        estimate.source = `file:${filePath}`;
-        return estimate;
+    getCharsPerToken(contentType) {
+        const resolved = this.resolveContentType(contentType);
+        return CHARS_PER_TOKEN[resolved];
     }
     /**
-     * Estimate tokens that are likely command output
-     */
-    estimateCommandOutput(output) {
-        return this.estimateFromText(output, 'commandOutput');
-    }
-    /**
-     * Calculate risk level based on fill percentage
+     * Classify context risk from a fill percentage.
      */
     calculateRisk(fillPercentage) {
         if (fillPercentage < 50)
             return 'LOW';
-        if (fillPercentage < 75)
+        if (fillPercentage < 80)
             return 'MEDIUM';
-        if (fillPercentage < 90)
+        if (fillPercentage < 95)
             return 'HIGH';
         return 'CRITICAL';
     }
     /**
-     * Build complete context breakdown from available data
+     * Estimate a full breakdown of context usage by category.
+     * Accepts up to 7 positional args for fine-grained estimation;
+     * extra args beyond the first 4 are treated as diffs, logs, errors.
      */
-    estimateBreakdown(messages, filesRead, toolOutputs, commandOutputs, diffs, logs, errors) {
-        const messagesEst = messages
-            ? this.estimateFromObject(messages, 'messages')
-            : this.createEmptyEstimate('messages');
-        const filesEst = filesRead && filesRead.length > 0
-            ? this.sumEstimates(filesRead.map(f => this.estimateFromFile(f.content, f.path)), 'files')
-            : this.createEmptyEstimate('files');
-        const toolsEst = toolOutputs
-            ? this.estimateFromObject(toolOutputs, 'commandOutput')
-            : this.createEmptyEstimate('tool-outputs');
-        const commandsEst = commandOutputs && commandOutputs.length > 0
-            ? this.sumEstimates(commandOutputs.map(c => this.estimateCommandOutput(c)), 'command-outputs')
-            : this.createEmptyEstimate('command-outputs');
-        const diffsEst = diffs && diffs.length > 0
-            ? this.sumEstimates(diffs.map(d => this.estimateFromText(d, 'diff')), 'diffs')
-            : this.createEmptyEstimate('diffs');
-        const logsEst = logs && logs.length > 0
-            ? this.sumEstimates(logs.map(l => this.estimateFromText(l, 'logOutput')), 'logs')
-            : this.createEmptyEstimate('logs');
-        const errorsEst = errors
-            ? this.estimateFromObject(errors, 'error')
-            : this.createEmptyEstimate('errors');
-        const total = this.sumEstimates([
-            messagesEst,
-            filesEst,
-            toolsEst,
-            commandsEst,
-            diffsEst,
-            logsEst,
-            errorsEst
-        ], 'total');
+    estimateBreakdown(messages, files, toolOutputs, commandOutputs, diffs, logs, errors) {
+        const messagesEst = this.estimateList(messages, 'messages');
+        const filesEst = this.estimateFiles(files);
+        const toolOutputsEst = this.estimateList(toolOutputs, 'json');
+        const commandOutputsEst = this.estimateTextList(commandOutputs, 'commandOutput');
+        const diffsEst = this.estimateTextList(diffs, 'diff');
+        const logsEst = this.estimateTextList(logs, 'logOutput');
+        const errorsEst = this.estimateList(errors, 'error');
+        const totalCount = messagesEst.count +
+            filesEst.count +
+            toolOutputsEst.count +
+            commandOutputsEst.count +
+            diffsEst.count +
+            logsEst.count +
+            errorsEst.count;
+        const total = {
+            count: totalCount,
+            type: 'estimated',
+            source: 'breakdown-sum',
+        };
         return {
             messages: messagesEst,
             files: filesEst,
-            toolOutputs: toolsEst,
-            commandOutputs: commandsEst,
+            toolOutputs: toolOutputsEst,
+            commandOutputs: commandOutputsEst,
             diffs: diffsEst,
             logs: logsEst,
             errors: errorsEst,
-            total
+            total,
         };
     }
     /**
-     * Build context status from breakdown
+     * Build a ContextStatus from a breakdown.
      */
     buildStatus(breakdown) {
         const used = breakdown.total.count;
-        const remaining = Math.max(0, this.maxTokens - used);
-        const fillPercentage = (used / this.maxTokens) * 100;
+        const total = this.maxTokens;
+        const remaining = Math.max(0, total - used);
+        const fillPercentage = total > 0
+            ? parseFloat(((used / total) * 100).toFixed(1))
+            : 0;
         const risk = this.calculateRisk(fillPercentage);
         return {
             used,
-            total: this.maxTokens,
+            total,
             remaining,
             fillPercentage,
             risk,
-            breakdown
+            breakdown,
         };
     }
+    // ==================================================================
+    //  INTERNAL HELPERS
+    // ==================================================================
     /**
-     * Helper: Create empty estimate
+     * Derive a content type heuristically from text content.
      */
-    createEmptyEstimate(source) {
+    detectContentType(text) {
+        const sample = text.slice(0, 500).trim();
+        if (this.looksLikeCode(sample))
+            return 'code';
+        if (this.looksLikeJson(sample))
+            return 'json';
+        if (this.looksLikeMarkdown(sample))
+            return 'markdown';
+        if (this.looksLikeLogOutput(sample))
+            return 'logOutput';
+        if (this.looksLikeDiff(sample))
+            return 'diff';
+        if (this.looksLikeCommandOutput(sample))
+            return 'commandOutput';
+        if (this.looksLikeError(sample))
+            return 'error';
+        return 'text';
+    }
+    looksLikeCode(text) {
+        const codeSig = /^(const|let|var|function|class|import|export|def )|(if\s*\()|(^[{};])/m;
+        return codeSig.test(text);
+    }
+    looksLikeJson(text) {
+        const trimmed = text.trim();
+        return (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+            (trimmed.startsWith('[') && trimmed.endsWith(']'));
+    }
+    looksLikeMarkdown(text) {
+        return /^#{1,6}\s+/m.test(text) || text.includes('```');
+    }
+    looksLikeLogOutput(text) {
+        return /^\[?\d{4}[-/]\d{2}[-/]\d{2}/m.test(text) &&
+            /(INFO|WARN|ERROR|DEBUG|TRACE)/i.test(text);
+    }
+    looksLikeDiff(text) {
+        return /^diff --git/m.test(text) ||
+            /^@@ -\d+,\d+ \+\d+,\d+ @@/m.test(text);
+    }
+    looksLikeCommandOutput(text) {
+        return text.includes('$ ') ||
+            /^\s*\[[\w./]+\][$#]/m.test(text) ||
+            /^> /m.test(text);
+    }
+    looksLikeError(text) {
+        return /error|exception|traceback/i.test(text) &&
+            (text.includes('at ') || text.includes('File "') || /:\d+:\d+/.test(text));
+    }
+    /** Resolve a loose content-type string to a canonical ContentType. */
+    resolveContentType(type) {
+        const key = type;
+        if (CHARS_PER_TOKEN[key] !== undefined)
+            return key;
+        return 'unknown';
+    }
+    /** Compute token count from character count and ratio. */
+    computeTokens(charCount, ratio) {
+        if (charCount <= 0 || ratio <= 0)
+            return 0;
+        const tokens = Math.ceil(charCount / ratio);
+        return Math.max(1, tokens);
+    }
+    /** Estimate tokens for a list of flat items (strings or objects). */
+    estimateList(items, contentType) {
+        if (!items || items.length === 0)
+            return this.emptyEstimate();
+        let charCount = 0;
+        for (const item of items) {
+            if (typeof item === 'string') {
+                charCount += item.length;
+            }
+            else if (item !== null && item !== undefined) {
+                charCount += this.safeStringify(item).length;
+            }
+        }
+        const ratio = this.getCharsPerToken(contentType);
         return {
-            count: 0,
+            count: this.computeTokens(charCount, ratio),
             type: 'estimated',
-            source
+            source: contentType,
         };
     }
-    /**
-     * Helper: Sum multiple estimates
-     */
-    sumEstimates(estimates, source) {
-        const total = estimates.reduce((sum, est) => sum + est.count, 0);
-        const types = new Set(estimates.map(e => e.type));
-        const type = types.has('estimated') ? 'estimated'
-            : types.has('api-derived') ? 'api-derived'
-                : 'exact';
+    /** Estimate tokens for a list of text strings with a specified content type. */
+    estimateTextList(items, contentType) {
+        if (!items || items.length === 0)
+            return this.emptyEstimate();
+        let charCount = 0;
+        for (const item of items) {
+            charCount += item.length;
+        }
+        const ratio = this.getCharsPerToken(contentType);
         return {
-            count: total,
-            type,
-            source
+            count: this.computeTokens(charCount, ratio),
+            type: 'estimated',
+            source: contentType,
         };
+    }
+    /** Estimate tokens for files, using per-file content type detection. */
+    estimateFiles(files) {
+        if (!files || files.length === 0)
+            return this.emptyEstimate();
+        let tokenSum = 0;
+        for (const file of files) {
+            const contentType = this.getContentTypeFromPath(file.path);
+            const ratio = this.getCharsPerToken(contentType);
+            const chars = file.content.length;
+            tokenSum += this.computeTokens(chars, ratio);
+        }
+        return {
+            count: tokenSum,
+            type: 'estimated',
+            source: 'files',
+        };
+    }
+    /** Safe JSON.stringify that handles circular references. */
+    safeStringify(obj) {
+        try {
+            return JSON.stringify(obj);
+        }
+        catch {
+            return '[unserializable]';
+        }
+    }
+    /** Return a zeroed-out token estimate. */
+    emptyEstimate() {
+        return { count: 0, type: 'estimated', source: 'none' };
     }
 }
 exports.ContextEstimator = ContextEstimator;

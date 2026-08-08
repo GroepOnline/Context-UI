@@ -1,73 +1,67 @@
 /**
- * Context Estimator - Token estimation logic
+ * Context Estimator — Token estimation engine for Pi.dev context tracking.
  *
- * Uses content-type-aware char-to-token ratios based on file extension and content analysis.
- * Each content type has empirically calibrated chars-per-token ratios.
+ * Estimates token counts from text, files, messages, commands,
+ * and tool outputs. Uses content-type–aware character-to-token
+ * ratios to approximate LLM token consumption.
  */
 import { TokenEstimate, ContentType, ContextBreakdown, ContextStatus, RiskLevel } from './types';
 export declare class ContextEstimator {
     private readonly maxTokens;
-    private readonly logThreshold;
-    private readonly diffThreshold;
-    constructor(maxTokens?: number, logThreshold?: number, diffThreshold?: number);
+    constructor(maxTokens?: number);
     /**
-     * Detect content type from file path
+     * Estimate token count from raw text, optionally specifying a content
+     * type to use the appropriate character-to-token ratio.
+     */
+    estimateFromText(text: string, contentType?: string): TokenEstimate;
+    /**
+     * Detect the content type category for a file path based on its extension.
      */
     getContentTypeFromPath(filePath: string): ContentType;
     /**
-     * Detect content type from text content heuristic
+     * Return the characters-per-token ratio for a given content type.
      */
-    detectContentType(text: string): ContentType;
+    getCharsPerToken(contentType: string): number;
     /**
-     * Get chars-per-token ratio for a given content type
-     */
-    getCharsPerToken(contentType: ContentType): number;
-    /**
-     * Analyze character distribution to compute a density penalty.
-     * Returns a multiplier: >1 means denser (more tokens), <1 means sparser.
-     *
-     * Texts with high symbol density (brackets, operators, punctuation)
-     * get more tokens per char. Texts with mostly letters/whitespace get fewer.
-     */
-    analyzeCharacterDensity(text: string): number;
-    /**
-     * Estimate tokens from text using content-type-based ratio with
-     * character-distribution refinement.
-     */
-    estimateFromText(text: string, contentTypeOrIsCode?: ContentType | boolean): TokenEstimate;
-    /**
-     * Estimate tokens from an object (recursively)
-     */
-    estimateFromObject(obj: unknown, contentType?: ContentType): TokenEstimate;
-    /**
-     * Estimate tokens from file content
-     */
-    estimateFromFile(content: string, filePath: string): TokenEstimate;
-    /**
-     * Estimate tokens that are likely command output
-     */
-    estimateCommandOutput(output: string): TokenEstimate;
-    /**
-     * Calculate risk level based on fill percentage
+     * Classify context risk from a fill percentage.
      */
     calculateRisk(fillPercentage: number): RiskLevel;
     /**
-     * Build complete context breakdown from available data
+     * Estimate a full breakdown of context usage by category.
+     * Accepts up to 7 positional args for fine-grained estimation;
+     * extra args beyond the first 4 are treated as diffs, logs, errors.
      */
-    estimateBreakdown(messages?: unknown[], filesRead?: Array<{
+    estimateBreakdown(messages?: unknown[], files?: Array<{
         path: string;
         content: string;
     }>, toolOutputs?: unknown[], commandOutputs?: string[], diffs?: string[], logs?: string[], errors?: unknown[]): ContextBreakdown;
     /**
-     * Build context status from breakdown
+     * Build a ContextStatus from a breakdown.
      */
     buildStatus(breakdown: ContextBreakdown): ContextStatus;
     /**
-     * Helper: Create empty estimate
+     * Derive a content type heuristically from text content.
      */
-    private createEmptyEstimate;
-    /**
-     * Helper: Sum multiple estimates
-     */
-    private sumEstimates;
+    private detectContentType;
+    private looksLikeCode;
+    private looksLikeJson;
+    private looksLikeMarkdown;
+    private looksLikeLogOutput;
+    private looksLikeDiff;
+    private looksLikeCommandOutput;
+    private looksLikeError;
+    /** Resolve a loose content-type string to a canonical ContentType. */
+    private resolveContentType;
+    /** Compute token count from character count and ratio. */
+    private computeTokens;
+    /** Estimate tokens for a list of flat items (strings or objects). */
+    private estimateList;
+    /** Estimate tokens for a list of text strings with a specified content type. */
+    private estimateTextList;
+    /** Estimate tokens for files, using per-file content type detection. */
+    private estimateFiles;
+    /** Safe JSON.stringify that handles circular references. */
+    private safeStringify;
+    /** Return a zeroed-out token estimate. */
+    private emptyEstimate;
 }
