@@ -2,7 +2,7 @@
 <coverage generated="1779380323797" clover="3.2.0">
   <project timestamp="1779380323797" name="All files">
     <metrics statements="482" coveredstatements="357" conditionals="325" coveredconditionals="179" methods="92" coveredmethods="79" elements="899" coveredelements="615" complexity="0" loc="482" ncloc="482" packages="1" files="6" classes="6"/>
-    <file name="contextEstimator.ts" path="/home/jan/OnlineChefgroep/Context-UI/src/contextEstimator.ts">
+    <file name="contextEstimator.ts" path="/home/jan/GroepOnline/Context-UI/src/contextEstimator.ts">
       <metrics statements="99" coveredstatements="81" conditionals="108" coveredconditionals="75" methods="20" coveredmethods="20"/>
       <line num="22" count="4" type="stmt"/>
       <line num="36" count="4" type="stmt"/>
@@ -104,7 +104,7 @@
       <line num="363" count="30" type="cond" truecount="1" falsecount="1"/>
       <line num="367" count="30" type="stmt"/>
     </file>
-    <file name="extension.ts" path="/home/jan/OnlineChefgroep/Context-UI/src/extension.ts">
+    <file name="extension.ts" path="/home/jan/GroepOnline/Context-UI/src/extension.ts">
       <metrics statements="60" coveredstatements="44" conditionals="33" coveredconditionals="16" methods="10" coveredmethods="7"/>
       <line num="19" count="4" type="stmt"/>
       <line num="20" count="4" type="stmt"/>
@@ -167,7 +167,7 @@
       <line num="228" count="0" type="stmt"/>
       <line num="229" count="0" type="stmt"/>
     </file>
-    <file name="piAdapter.ts" path="/home/jan/OnlineChefgroep/Context-UI/src/piAdapter.ts">
+    <file name="piAdapter.ts" path="/home/jan/GroepOnline/Context-UI/src/piAdapter.ts">
       <metrics statements="54" coveredstatements="21" conditionals="55" coveredconditionals="18" methods="17" coveredmethods="11"/>
       <line num="24" count="4" type="stmt"/>
       <line num="25" count="4" type="stmt"/>
@@ -224,7 +224,7 @@
       <line num="168" count="0" type="stmt"/>
       <line num="172" count="17" type="stmt"/>
     </file>
-    <file name="terminalRenderer.ts" path="/home/jan/OnlineChefgroep/Context-UI/src/terminalRenderer.ts">
+    <file name="terminalRenderer.ts" path="/home/jan/GroepOnline/Context-UI/src/terminalRenderer.ts">
       <metrics statements="190" coveredstatements="159" conditionals="60" coveredconditionals="38" methods="29" coveredmethods="28"/>
       <line num="16" count="2" type="stmt"/>
       <line num="17" count="2" type="stmt"/>
@@ -417,10 +417,10 @@
       <line num="463" count="5" type="stmt"/>
       <line num="467" count="5" type="stmt"/>
     </file>
-    <file name="types.ts" path="/home/jan/OnlineChefgroep/Context-UI/src/types.ts">
+    <file name="types.ts" path="/home/jan/GroepOnline/Context-UI/src/types.ts">
       <metrics statements="0" coveredstatements="0" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
     </file>
-    <file name="workingSetAnalyzer.ts" path="/home/jan/OnlineChefgroep/Context-UI/src/workingSetAnalyzer.ts">
+    <file name="workingSetAnalyzer.ts" path="/home/jan/GroepOnline/Context-UI/src/workingSetAnalyzer.ts">
       <metrics statements="79" coveredstatements="52" conditionals="69" coveredconditionals="32" methods="16" coveredmethods="13"/>
       <line num="26" count="7" type="cond" truecount="2" falsecount="0"/>
       <line num="27" count="7" type="stmt"/>
