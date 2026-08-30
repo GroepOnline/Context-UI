@@ -6,8 +6,24 @@ on:
   pull_request:
     branches: [main, master]
 
+permissions:
+  contents: read
+
 jobs:
   ci:
-    uses: GroepOnline/.github/.github/workflows/ci.yml@64b52a28a0720444572737cb882f37bac253dc79
-    with:
-      language: node
+    # Keep the shared fleet contract in-repo: public repos cannot call private reusables.
+    runs-on: ${{ github.event_name == 'pull_request' && fromJSON('["self-hosted","Linux","X64","pr-isolated"]') || fromJSON('["self-hosted","Linux","X64","heavy"]') }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '25.9.0'
+          cache: npm
+
+      - name: Install and test
+        run: |
+          npm ci
+          npm run lint --if-present
+          npm test --if-present
