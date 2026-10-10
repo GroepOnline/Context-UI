@@ -1,5 +1,8 @@
 name: Cloudflare Pages Deployment
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]
